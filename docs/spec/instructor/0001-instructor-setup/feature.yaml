@@ -7,4 +7,4 @@ participating-domains: [schedule, membership, entitlement]
 status: planned          # planned | designing | in-progress | done | deferred | withdrawn
 extends: null           # 후속 작업이면 앞 기능 번호. 예: "0004"
 created: 2026-09-30
-decisions: []
+decisions: [DEC-0001, DEC-0002, DEC-0003, DEC-0004, DEC-0006, BE-ADR-0005, BE-ADR-0006, BE-ADR-0007, BE-ADR-0008, BE-ADR-0009]

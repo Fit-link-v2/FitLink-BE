@@ -1,11 +1,12 @@
 # BE-0003 개발 PRD · 예약·취소
 
-> **1차 이전본.** Notion "테이블 설계 · ERD" 문서에서 이 기능에 해당하는 부분을 잘라 옮겼다. 내용은 원문 그대로다. [템플릿](../../../templates/prd.md) 형식으로 다시 쓰고 회의 결정을 반영하는 건 2차에서 한다.
+> Notion "테이블 설계 · ERD" 문서에서 이 기능에 해당하는 부분을 옮긴 뒤, 2026-09-25 회의 결정([DEC-0001~0006](https://github.com/Fit-link-v2/Fit-link-PRD/tree/main/decisions))을 반영했다. 아직 recatch-tdd prd 단계 전이다. [템플릿](../../../templates/prd.md) 형식(인수 조건 · API 절)으로 다시 쓰는 것은 이 기능의 prd 단계에서 한다.
 
 ## 근거
 
 - 제품 PRD: [PRD-0003](https://github.com/Fit-link-v2/Fit-link-PRD/tree/main/prd/0003-booking)
 - 쓰기 경로 현재 전체 모습: [write-paths.md](../write-paths.md)
+- 관련 결정: [DEC-0006](https://github.com/Fit-link-v2/Fit-link-PRD/blob/main/decisions/0006-booking-rules.md) (같은 날 여러 예약 · 휴강), [DEC-0005](https://github.com/Fit-link-v2/Fit-link-PRD/blob/main/decisions/0005-validation-target.md) (검증 기준), [BE-ADR-0001](../../../decisions/0001-taken-counter.md), [BE-ADR-0002](../../../decisions/0002-history-tables-first.md), [BE-ADR-0010](../../../decisions/0010-restored-in-0003.md)
 
 ## 기술 설계
 
@@ -31,7 +32,7 @@ CREATE TABLE entitlement_adjustment (
 CREATE TABLE booking (
   id             bigserial   PRIMARY KEY,
   member_id      bigint      NOT NULL REFERENCES member(id),
-  class_id       bigint      NOT NULL REFERENCES class(id),
+  class_slot_id       bigint      NOT NULL REFERENCES class_slot(id),
   entitlement_id bigint      NOT NULL REFERENCES entitlement(id),
   status         text        NOT NULL DEFAULT 'ACTIVE'
                    CHECK (status IN ('ACTIVE', 'CANCELED')),
@@ -57,10 +58,10 @@ CREATE TABLE booking (
 
 -- 같은 수업 중복 예약 차단. 위반이 곧 409 ALREADY_BOOKED다.
 CREATE UNIQUE INDEX booking_active_uidx
-  ON booking (member_id, class_id) WHERE status = 'ACTIVE';
+  ON booking (member_id, class_slot_id) WHERE status = 'ACTIVE';
 
-CREATE INDEX booking_class_idx
-  ON booking (class_id) WHERE status = 'ACTIVE';        -- 강사 명단
+CREATE INDEX booking_class_slot_idx
+  ON booking (class_slot_id) WHERE status = 'ACTIVE';        -- 강사 명단
 CREATE INDEX booking_history_idx
   ON booking (member_id, created_at DESC);              -- 지난 기록 30건
 ```
@@ -78,7 +79,7 @@ CREATE TABLE event_log (
   id         bigserial   PRIMARY KEY,
   type       text        NOT NULL,   -- BOOKING_CREATED | BOOKING_CANCELED
   member_id  bigint      REFERENCES member(id),
-  class_id   bigint      REFERENCES class(id),
+  class_slot_id   bigint      REFERENCES class_slot(id),
   payload    jsonb,
   created_at timestamptz NOT NULL DEFAULT now()
 );
@@ -86,9 +87,9 @@ CREATE TABLE event_log (
 CREATE INDEX event_log_week_idx ON event_log (type, created_at);
 ```
 
-성공 기준이 "강사 1명이 4주 연속 카톡 대신 사용"이므로 주 단위 집계가 필요하다. `booking` 테이블만으로도 대부분 셀 수 있지만, 취소된 예약은 행이 갱신되어 원래 시각이 지워지지 않게 별도로 남긴다.
+성공 기준이 "강사 5명 중 3명이 각자 4주 연속 사용"이고, 판정은 시스템이 세는 강사별 주간 화면 예약 건수로 한다([DEC-0005](https://github.com/Fit-link-v2/Fit-link-PRD/blob/main/decisions/0005-validation-target.md)). 그래서 강사별 · 주 단위 집계가 필요하다. `event_log`에는 `instructor_id`가 없고 `member_id` → `member.instructor_id`로 강사를 찾는다. `booking` 테이블만으로도 대부분 셀 수 있지만, 취소된 예약은 행이 갱신되어 원래 시각이 지워지지 않게 별도로 남긴다.
 
-이력 테이블은 **늦게 만들면 그 이전 기간을 되살릴 수 없다.** 마이그레이션 난이도는 낮은데 비가역성은 높은 유형이다. [`design-tradeoffs.md`](../../../architecture/design-tradeoffs.md)에서 다시 다룬다.
+이력 테이블은 **늦게 만들면 그 이전 기간을 되살릴 수 없다.** 마이그레이션 난이도는 낮은데 비가역성은 높은 유형이다. [BE-ADR-0002](../../../decisions/0002-history-tables-first.md)에서 다시 다룬다.
 
 ### 마이그레이션
 
@@ -96,7 +97,9 @@ PRD 단위가 배포 단위는 아니다. 1차 배포에는 PRD 1~3이 함께 �
 
 | 마이그레이션 | 내용 | 시점 |
 |---|---|---|
-| 002 | booking(cancel_reason 포함, restored 제외), entitlement_adjustment, event_log | PRD 3. 1차 배포에 포함 |
+| 002 | booking(cancel_reason · restored 포함), entitlement_adjustment, event_log | PRD 3. 1차 배포에 포함 |
+
+`restored`는 원래 PRD 5(마이그레이션 004)에서 넣을 예정이었다. 휴강이 PRD 3으로 들어오면서 PRD 3 시점에 이미 "강사 휴강은 항상 복구"를 기록해야 하므로 002로 앞당겼다. 이 시점의 회원 취소는 항상 복구이므로 `restored = true`만 쓰인다. 근거는 [BE-ADR-0010](../../../decisions/0010-restored-in-0003.md).
 
 ## AC 대 제약
 
@@ -106,13 +109,18 @@ PRD 단위가 배포 단위는 아니다. 1차 배포에는 PRD 1~3이 함께 �
 |---|---|---|
 | 3 · AC 1.3.1 | 정원 초과 예약 불가 | 조건부 UPDATE + CHECK taken ≤ capacity |
 | 3 · AC 1.3.5 | 만료 이른 수강권 자동 선택 | 인덱스 (member_id, window_end) |
-| 3 · AC 3.1 | ALREADY_BOOKED | `booking` 부분 유니크 (member_id, class_id) WHERE ACTIVE |
+| 3 · AC 3.1 | ALREADY_BOOKED | `booking` 부분 유니크 (member_id, class_slot_id) WHERE ACTIVE |
 | 3 · AC 4.2 | 지난 기록에 사유 표시 | `booking.cancel_reason` + `restored` |
 | 3 · AC 4.2.3 | 지난 기록 최근 30건 | 인덱스 (member_id, created_at DESC) |
 | 3 · AC 5.2.2 | 수정 시각과 이전 값 기록 | `entitlement_adjustment` 테이블 |
+| 3 · AC 1.5.1 | 같은 날 여러 예약 허용 | 날짜 단위 유니크 없음 (의도적 부재). 유니크는 (member_id, class_slot_id)뿐 |
+| 3 · AC 7.2.1 | 휴강 취소 사유 기록 | `booking.cancel_reason = 'INSTRUCTOR'` |
+| 3 · AC 7.2.2 | 휴강은 마감과 무관하게 복구 | `booking_instructor_cancel_restores` CHECK |
+| 3 · AC 7.2.4 | 이미 휴강한 슬롯은 변화 없음 | 휴강 UPDATE 조건 `canceled_at IS NULL`. 0행이면 롤백 |
+| 3 · AC 7.2.5 | 휴강은 한 트랜잭션 | [쓰기 경로 5.2](../write-paths.md) |
 
 ## 열린 질문
 
 | # | 질문 | 영향 |
 |---|---|---|
-| Q6 | `event_log`가 MVP에 필요한가 | `booking`의 created_at · canceled_at으로도 주 단위 집계가 대부분 가능하다. 다만 이력은 늦게 만들면 되살릴 수 없으므로 빼는 결정은 신중해야 한다 |
+| ~~Q6~~ | ~~`event_log`가 MVP에 필요한가~~ | **해소.** 유지한다. 이력은 늦게 만들면 되살릴 수 없다([BE-ADR-0002](../../../decisions/0002-history-tables-first.md)) |

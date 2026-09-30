@@ -4,5 +4,5 @@ owner: be
 tables:
   - name: recurrence
     introduced-in: "0001"
-  - name: class
+  - name: class_slot
     introduced-in: "0001"

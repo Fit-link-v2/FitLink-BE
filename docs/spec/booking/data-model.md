@@ -1,6 +1,47 @@
 # 예약 도메인 데이터 모델
 
-> 1차 뼈대. 도메인 ERD는 2차에서 그린다. 전체 그림은 [컨텍스트 맵](../../architecture/context-map.md).
+도메인 사이 관계는 [컨텍스트 맵](../../architecture/context-map.md). 다른 도메인 테이블은 이름과 id만 그렸다.
+
+## ERD
+
+```mermaid
+erDiagram
+    MEMBER ||--o{ BOOKING : "예약"
+    MEMBER ||--o{ WAITLIST : "대기"
+    CLASS_SLOT ||--o{ BOOKING : "자리"
+    CLASS_SLOT ||--o{ WAITLIST : "대기열"
+    ENTITLEMENT ||--o{ BOOKING : "차감"
+    WAITLIST ||--o| BOOKING : "승계"
+    BOOKING {
+        bigint id PK
+        bigint member_id FK
+        bigint class_slot_id FK
+        bigint entitlement_id FK
+        text status "ACTIVE CANCELED"
+        text cancel_reason "MEMBER INSTRUCTOR"
+        boolean restored "취소 시에만"
+        timestamptz created_at
+        timestamptz canceled_at
+    }
+    WAITLIST {
+        bigint id PK
+        bigint member_id FK
+        bigint class_slot_id FK
+        text status "WAITING CANCELED CONVERTED"
+        bigint converted_booking_id FK
+        timestamptz created_at
+        timestamptz canceled_at
+    }
+    MEMBER {
+        bigint id PK "다른 도메인"
+    }
+    CLASS_SLOT {
+        bigint id PK "다른 도메인"
+    }
+    ENTITLEMENT {
+        bigint id PK "다른 도메인"
+    }
+```
 
 쓰기 흐름(트랜잭션 · 상태 전이)은 [쓰기 경로](write-paths.md)에 있다.
 
@@ -19,7 +60,7 @@
 -- restorable 판정. 클라이언트 시각은 쓰지 않는다 (PRD 5 AC 2.1.1~2.1.3)
 SELECT now() < c.starts_at - (s.cancel_deadline_hours || ' hours')::interval
          AS restorable
-  FROM class c
+  FROM class_slot c
   JOIN recurrence r ON r.id = c.recurrence_id
   JOIN setting    s ON s.instructor_id = r.instructor_id
  WHERE c.id = $1;
@@ -33,7 +74,7 @@ SELECT now() < c.starts_at - (s.cancel_deadline_hours || ' hours')::interval
 
 ```sql
 SELECT id, member_id,
-       ROW_NUMBER() OVER (PARTITION BY class_id ORDER BY created_at) AS position
+       ROW_NUMBER() OVER (PARTITION BY class_slot_id ORDER BY created_at) AS position
   FROM waitlist
- WHERE class_id = $1 AND status = 'WAITING';
+ WHERE class_slot_id = $1 AND status = 'WAITING';
 ```

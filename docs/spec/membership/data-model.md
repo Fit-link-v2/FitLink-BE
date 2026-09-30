@@ -1,6 +1,33 @@
 # 회원 도메인 데이터 모델
 
-> 1차 뼈대. 도메인 ERD는 2차에서 그린다. 전체 그림은 [컨텍스트 맵](../../architecture/context-map.md).
+도메인 사이 관계는 [컨텍스트 맵](../../architecture/context-map.md). 다른 도메인 테이블은 이름과 id만 그렸다.
+
+## ERD
+
+```mermaid
+erDiagram
+    INSTRUCTOR ||--o{ MEMBER : "자기 회원"
+    MEMBER ||--o{ MEMBER_LINK : "링크 발급"
+    MEMBER {
+        bigint id PK
+        bigint instructor_id FK
+        text name "동명이인 허용"
+        text memo
+        text status "ACTIVE ENDED"
+    }
+    MEMBER_LINK {
+        bigint id PK
+        bigint member_id FK
+        bytea token_hash UK "sha256 32B"
+        timestamptz issued_at
+        timestamptz first_opened_at
+        timestamptz last_used_at
+        timestamptz revoked_at
+    }
+    INSTRUCTOR {
+        bigint id PK "다른 도메인"
+    }
+```
 
 ## 테이블
 
@@ -24,7 +51,7 @@ SELECT m.id AS member_id, m.instructor_id
 
 -- 2. 그 강사의 슬롯만
 SELECT c.id, c.starts_at, c.capacity - c.taken AS remaining
-  FROM class c
+  FROM class_slot c
   JOIN recurrence r ON r.id = c.recurrence_id
   JOIN setting    s ON s.instructor_id = r.instructor_id
  WHERE r.instructor_id = $그_강사

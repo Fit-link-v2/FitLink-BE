@@ -1,6 +1,6 @@
 # BE-0001 개발 PRD · 강사 세팅
 
-> **1차 이전본.** Notion "테이블 설계 · ERD" 문서에서 이 기능에 해당하는 부분을 잘라 옮겼다. 내용은 원문 그대로다. [템플릿](../../../templates/prd.md) 형식으로 다시 쓰고 회의 결정을 반영하는 건 2차에서 한다.
+> Notion "테이블 설계 · ERD" 문서에서 이 기능에 해당하는 부분을 옮긴 뒤, 2026-09-25 회의 결정([DEC-0001~0006](https://github.com/Fit-link-v2/Fit-link-PRD/tree/main/decisions))을 반영했다. 아직 recatch-tdd prd 단계 전이다. [템플릿](../../../templates/prd.md) 형식(인수 조건 · API 절)으로 다시 쓰는 것은 이 기능의 prd 단계에서 한다.
 
 ## 근거
 
@@ -10,19 +10,28 @@
 
 ### 이 기능이 만드는 범위
 
-PRD 1 단계에서 실제로 `CREATE TABLE`하는 것은 이 7개다. `booking` · `waitlist` · `event_log` · `entitlement_adjustment`는 PRD 3 이후에 붙는다.
+PRD 1 단계에서 실제로 `CREATE TABLE`하는 것은 이 9개다. `booking` · `waitlist` · `event_log` · `entitlement_adjustment`는 PRD 3 이후에 붙는다.
 
 ```mermaid
 erDiagram
     INSTRUCTOR ||--|| SETTING : "자기 설정"
+    INSTRUCTOR ||--o{ INSTRUCTOR_SESSION : "로그인 세션"
     INSTRUCTOR ||--o{ MEMBER : "자기 회원"
     INSTRUCTOR ||--o{ RECURRENCE : "자기 시간표"
     INSTRUCTOR {
         bigint id PK
-        text provider "GOOGLE KAKAO"
+        text provider "KAKAO"
         text provider_user_id UK
         text email
         text name
+    }
+    INSTRUCTOR_SESSION {
+        bigint id PK
+        bigint instructor_id FK
+        bytea session_hash UK "sha256 32B"
+        timestamptz last_seen_at
+        timestamptz expires_at "sliding 14일"
+        timestamptz revoked_at "로그아웃"
     }
     SETTING {
         bigint instructor_id PK
@@ -49,6 +58,8 @@ erDiagram
 
     MEMBER ||--o{ MEMBER_LINK : "링크 발급"
     MEMBER ||--o{ ENTITLEMENT : "수강권 보유"
+    MEMBER ||--o{ SUBSCRIPTION : "월 정액 등록"
+    SUBSCRIPTION ||--o{ ENTITLEMENT : "주기마다 생성"
     MEMBER {
         bigint id PK
         bigint instructor_id FK
@@ -73,16 +84,25 @@ erDiagram
         date window_end
         int max_count
         int used_count
-        bigint source_id FK
+        bigint source_id FK "월 정액이면 subscription"
+    }
+    SUBSCRIPTION {
+        bigint id PK
+        bigint member_id FK
+        text period_unit "WEEK MONTH"
+        int count_per_period
+        date starts_on
+        int period_count
+        date ends_on
     }
 ```
 
 | 컬럼 | PRD 1이 쓰나 | 지금 넣는 이유 |
 |---|---|---|
-| `class.taken` | **아니오** | PRD 3 AC 1.3.1의 조건부 UPDATE 대상. 나중에 넣으려면 이미 생성된 슬롯 전부를 backfill해야 한다 |
+| `class_slot.taken` | **아니오** | PRD 3 AC 1.3.1의 조건부 UPDATE 대상. 나중에 넣으려면 이미 생성된 슬롯 전부를 backfill해야 한다 |
 | `entitlement.used_count` | 예 | AC 3.2.3의 "잔여 = max_count - used_count"와 강사의 수기 수정에 쓴다 |
 | `member_link.revoked_at` | 예 | AC 4.3.1 재발급 |
-| `class.canceled_at` | 예 (쓰기) | AC 2.3.1 휴강. 읽는 쪽은 PRD 2다 |
+| `class_slot.canceled_at` | 예 (쓰기) | AC 2.3.1 휴강. 읽는 쪽은 PRD 2다 |
 
 표에서 첫 줄 하나만 "PRD 1이 안 쓰는" 컬럼이다. 그리고 그 하나가 **PRD 1의 인수 조건만으로는 도출되지 않는다.**
 
@@ -90,7 +110,7 @@ AC 2.1.1은 `capacity`(정원 상한)를 요구하지만 `taken`(현재 찬 인�
 
 정리하면 이렇다. 세부 인수 조건(PRD 3~5)이 없어도 상위 구상만 있으면 `taken`은 나온다. 그러나 **PRD 1만으로는 나오지 않는다.** 그 상태에서 설계하면 "예약 인원은 `booking`을 COUNT하면 되니 `taken`은 필요 없다"로 가게 되고, 정원 조건부 UPDATE를 쓸 수 없게 된다.
 
-반대로 `booking.restored`(PRD 5)처럼 **PRD 1 시점에 알 수도 없고 나중에 넣으면 비싼** 항목도 남는다. 스키마를 앞 단계 문서만으로 전부 확정할 수는 없다는 뜻이다. 이 문서가 PRD 1~5를 한 번에 읽고 작성된 이유다.
+반대로 `booking.restored`(PRD 3 휴강 · PRD 5 마감)처럼 **PRD 1 시점에 알 수도 없고 나중에 넣으면 비싼** 항목도 남는다. 스키마를 앞 단계 문서만으로 전부 확정할 수는 없다는 뜻이다. 이 문서가 PRD 1~5를 한 번에 읽고 작성된 이유다.
 
 팀원과 공유할 때는 전체 그림과 이 절을 같이 본다. 전체 그림은 "최종적으로 여기로 간다", 이 절은 "이번 단계에 손대는 범위"를 말한다.
 
@@ -101,9 +121,9 @@ AC 2.1.1은 `capacity`(정원 상한)를 요구하지만 `taken`(현재 찬 인�
 ```sql
 CREATE TABLE instructor (
   id               bigserial   PRIMARY KEY,
-  provider         text        NOT NULL CHECK (provider IN ('GOOGLE', 'KAKAO')),
+  provider         text        NOT NULL CHECK (provider IN ('KAKAO')),
   provider_user_id text        NOT NULL,
-  email            text,
+  email            text,       -- 카카오 필수 동의로 받는다. 비즈 앱 전환 전에는 비어 있을 수 있다
   name             text,
   created_at       timestamptz NOT NULL DEFAULT now(),
 
@@ -115,15 +135,53 @@ CREATE TABLE setting (
   instructor_id         bigint      PRIMARY KEY REFERENCES instructor(id),
   open_range_days       int         NOT NULL DEFAULT 14
                           CHECK (open_range_days BETWEEN 7 AND 28),
-  cancel_deadline_hours int         NOT NULL DEFAULT 3
+  cancel_deadline_hours int         NOT NULL DEFAULT 3     -- 기능 0005(마이그레이션 004)에서 추가
                           CHECK (cancel_deadline_hours BETWEEN 0 AND 72),
   updated_at            timestamptz NOT NULL DEFAULT now()
 );
 ```
 
-비밀번호를 담는 컬럼이 없다. OAuth provider가 인증을 끝내고 우리는 `(provider, provider_user_id)`만 받는다. 유출 시 비밀번호가 새지 않고, 재설정 화면도 필요 없다.
+비밀번호를 담는 컬럼이 없다. 카카오가 인증을 끝내고 우리는 `(provider, provider_user_id)`만 받는다([DEC-0001](https://github.com/Fit-link-v2/Fit-link-PRD/blob/main/decisions/0001-instructor-kakao-oauth.md)). 유출 시 비밀번호가 새지 않고, 재설정 화면도 필요 없다. `provider` CHECK는 지금 `KAKAO` 하나다. 다른 로그인 수단을 붙이면 CHECK 값만 늘린다.
 
-`setting`의 PK가 `instructor_id`이므로 강사당 정확히 1행이 강제된다. 가입 직후 기본값으로 1행을 만든다.
+`instructor_identity_uk`가 PRD 1 AC 1.2.3("같은 카카오 계정으로 다시 로그인하면 새로 가입되지 않는다")의 물리적 표현이다. 가입은 `INSERT ... ON CONFLICT (provider, provider_user_id) DO NOTHING` 뒤 조회로 처리하면 동시에 두 번 눌러도 강사가 두 명 생기지 않는다.
+
+`setting`의 PK가 `instructor_id`이므로 강사당 정확히 1행이 강제된다. 가입과 같은 트랜잭션에서 기본값으로 1행을 만든다(PRD 1 AC 1.2.2).
+
+#### 1-1. 로그인 세션
+
+```sql
+-- 강사 로그인 세션 (DEC-0002). 세션 ID 원본은 쿠키에만 있고 DB에는 해시만 남는다.
+CREATE TABLE instructor_session (
+  id            bigserial   PRIMARY KEY,
+  instructor_id bigint      NOT NULL REFERENCES instructor(id),
+  session_hash  bytea       NOT NULL UNIQUE,   -- SHA-256, 32바이트
+  created_at    timestamptz NOT NULL DEFAULT now(),
+  last_seen_at  timestamptz NOT NULL DEFAULT now(),
+  expires_at    timestamptz NOT NULL,          -- last_seen_at + 14일
+  revoked_at    timestamptz                    -- 로그아웃
+);
+
+CREATE INDEX instructor_session_owner_idx ON instructor_session (instructor_id);
+```
+
+```sql
+-- 요청마다: 유효한 세션인지 확인하면서 만료를 연장한다 (PRD 1 AC 1.1.6)
+UPDATE instructor_session
+   SET last_seen_at = now(), expires_at = now() + interval '14 days'
+ WHERE session_hash = $hash AND revoked_at IS NULL AND expires_at > now()
+RETURNING instructor_id;
+-- 0행이면 로그인 화면으로
+
+-- 로그아웃 (PRD 1 AC 1.1.7)
+UPDATE instructor_session SET revoked_at = now()
+ WHERE session_hash = $hash AND revoked_at IS NULL;
+```
+
+세션 ID 원본을 저장하지 않는 이유는 `member_link`와 같다. DB가 유출돼도 살아 있는 세션을 가져갈 수 없다([DEC-0002](https://github.com/Fit-link-v2/Fit-link-PRD/blob/main/decisions/0002-instructor-session-cookie.md)).
+
+만료를 요청마다 연장하면 요청마다 쓰기가 한 번 생긴다. 강사 수십 명 규모에서는 문제되지 않는다. 부담이 되면 `last_seen_at`이 일정 시간 이상 지났을 때만 갱신한다. 만료되거나 로그아웃한 행은 주기적으로 지운다.
+
+이 테이블을 직접 만들지, Spring Session JDBC를 쓸지는 [BE-ADR-0008](../../../decisions/0008-session-store.md)에서 다룬다. Spring Session JDBC의 기본 스키마는 세션 ID를 원본으로 저장한다.
 
 #### 2. 시간표
 
@@ -144,7 +202,7 @@ CREATE INDEX recurrence_owner_idx ON recurrence (instructor_id);
 CREATE UNIQUE INDEX recurrence_slot_uidx
   ON recurrence (instructor_id, weekday, start_time) WHERE active;
 
-CREATE TABLE class (
+CREATE TABLE class_slot (
   id            bigserial   PRIMARY KEY,
   recurrence_id bigint      NOT NULL REFERENCES recurrence(id),
   starts_at     timestamptz NOT NULL,
@@ -153,18 +211,18 @@ CREATE TABLE class (
   canceled_at   timestamptz,
   created_at    timestamptz NOT NULL DEFAULT now(),
 
-  CONSTRAINT class_slot_uk     UNIQUE (recurrence_id, starts_at),
-  CONSTRAINT class_taken_range CHECK (taken >= 0 AND taken <= capacity)
+  CONSTRAINT class_slot_recurrence_starts_uk     UNIQUE (recurrence_id, starts_at),
+  CONSTRAINT class_slot_taken_range CHECK (taken >= 0 AND taken <= capacity)
 );
 
 -- 회원 화면은 항상 "휴강 아닌 슬롯을 시각순으로" 읽는다.
-CREATE INDEX class_open_starts_at_idx
-  ON class (starts_at) WHERE canceled_at IS NULL;
+CREATE INDEX class_slot_open_starts_at_idx
+  ON class_slot (starts_at) WHERE canceled_at IS NULL;
 ```
 
-`class.capacity`는 생성 시점에 `recurrence.capacity`를 복사한다. 반복 규칙의 정원을 나중에 바꿔도 이미 생성된 슬롯은 흔들리지 않는다. 복사하지 않고 참조하면 "그때 정원이 몇이었나"를 영원히 복원할 수 없다.
+`class_slot.capacity`는 생성 시점에 `recurrence.capacity`를 복사한다. 반복 규칙의 정원을 나중에 바꿔도 이미 생성된 슬롯은 흔들리지 않는다. 복사하지 않고 참조하면 "그때 정원이 몇이었나"를 영원히 복원할 수 없다.
 
-`class_taken_range`는 예약 트랜잭션의 조건부 UPDATE가 뚫렸을 때를 막는 마지막 방어선이다. 애플리케이션 버그로 정원을 넘기는 UPDATE가 들어오면 DB가 거부한다.
+`class_slot_taken_range`는 예약 트랜잭션의 조건부 UPDATE가 뚫렸을 때를 막는 마지막 방어선이다. 애플리케이션 버그로 정원을 넘기는 UPDATE가 들어오면 DB가 거부한다.
 
 반복 주기는 매주로 고정돼 있다. 격주 · 월 n번째 주는 PRD 1의 범위 밖이다(인터뷰 7번). 넣게 되면 `recurrence`에 `interval_weeks`와 `anchor_date` 두 컬럼이 붙는다. 기존 행은 각각 1과 생성일로 채우면 되므로 나중에 넣어도 비용이 낮다.
 
@@ -216,12 +274,14 @@ CREATE TABLE entitlement (
   window_end   date        NOT NULL,
   max_count    int         NOT NULL CHECK (max_count > 0),
   used_count   int         NOT NULL DEFAULT 0,
-  source_id    bigint,     -- 월 정액의 원본. 열린 질문 Q5 참조
+  source_id    bigint      REFERENCES subscription(id),   -- 월 정액이면 그 등록, 횟수권이면 NULL
   created_at   timestamptz NOT NULL DEFAULT now(),
 
   CONSTRAINT entitlement_window_order CHECK (window_start <= window_end),
   CONSTRAINT entitlement_used_range
-    CHECK (used_count >= 0 AND used_count <= max_count)
+    CHECK (used_count >= 0 AND used_count <= max_count),
+  CONSTRAINT entitlement_source_shape
+    CHECK ((kind = 'SUBSCRIPTION') = (source_id IS NOT NULL))
 );
 
 -- 예약 시 "유효한 것 중 만료가 가장 이른 1장"을 고른다 (PRD 3 AC 1.3.5).
@@ -232,31 +292,52 @@ CREATE INDEX entitlement_pick_idx ON entitlement (member_id, window_end);
 
 `entitlement_used_range`가 AC 3.2.3의 "0 이상 max_count 이하"를 그대로 담는다. 강사의 수기 수정도 이 범위를 벗어날 수 없다.
 
-##### 월 정액으로 확정될 경우의 미결 사항
+#### 5. 월 정액
 
-`source_id`에 FK를 걸지 않았다. 가리킬 대상이 아직 정해지지 않았기 때문이다.
-
-`entitlement`를 자기 참조하게 두면 조회가 깨진다. 강사가 만든 "구독 설정" 행과 배치가 만든 "주기별 권리" 행이 같은 테이블에 섞이는데, PRD 3 AC 1.3.5의 "유효한 것 중 만료가 가장 이른 1장"에 **구독 설정 행도 걸린다.** 거기서 차감될 수 있다. `source_id IS NOT NULL`로 거르면 횟수권(`source_id`가 NULL)이 빠진다.
-
-해결은 구독 설정을 별도 테이블로 빼는 것이다.
+`subscription`은 `entitlement`보다 먼저 만든다. `entitlement.source_id`가 이 테이블을 가리킨다.
 
 ```sql
--- 월 정액으로 확정될 때만 만든다
+-- 월 정액 등록 1건 (DEC-0004). 차감 대상이 아니라 주기별 entitlement를 만들어내는 설정이다.
 CREATE TABLE subscription (
-  id               bigserial PRIMARY KEY,
-  member_id        bigint    NOT NULL REFERENCES member(id),
-  count_per_period int       NOT NULL,      -- 주 2회면 2
-  period_unit      text      NOT NULL CHECK (period_unit IN ('WEEK', 'MONTH')),
-  starts_on        date      NOT NULL,
-  ends_on          date,
-  active           boolean   NOT NULL DEFAULT true
+  id               bigserial   PRIMARY KEY,
+  member_id        bigint      NOT NULL REFERENCES member(id),
+  period_unit      text        NOT NULL CHECK (period_unit IN ('WEEK', 'MONTH')),
+  count_per_period int         NOT NULL CHECK (count_per_period > 0),
+  starts_on        date        NOT NULL,   -- 강사가 지정한 시작일. 주기는 여기서부터 센다
+  period_count     int         NOT NULL CHECK (period_count > 0),   -- 4주, 3개월
+  ends_on          date        NOT NULL,   -- 마지막 주기의 마지막 날. 등록할 때 계산해 저장
+  created_at       timestamptz NOT NULL DEFAULT now(),
+
+  CONSTRAINT subscription_range_order CHECK (starts_on <= ends_on)
 );
--- entitlement.source_id → subscription.id
+
+CREATE INDEX subscription_member_idx ON subscription (member_id);
+
+-- 같은 월 정액의 같은 주기는 한 번만 만든다. 배치를 여러 번 돌려도 결과가 같다.
+CREATE UNIQUE INDEX entitlement_period_uidx
+  ON entitlement (source_id, window_start) WHERE source_id IS NOT NULL;
+
+-- 한 회원이 다른 종류의 수강권을 기간이 겹치게 가질 수 없다 (PRD 1 AC 3.2.10).
+-- 같은 종류끼리는 겹쳐도 된다 (AC 3.2.11). <> 비교에는 btree_gist 확장이 필요하다.
+CREATE EXTENSION IF NOT EXISTS btree_gist;
+
+ALTER TABLE entitlement ADD CONSTRAINT entitlement_kind_no_overlap
+  EXCLUDE USING gist (
+    member_id WITH =,
+    kind WITH <>,
+    (daterange(window_start, window_end, '[]')) WITH &&
+  );
 ```
 
-이러면 `entitlement`에는 실제로 쓸 수 있는 권리만 남는다. PRD 0이 합친 것은 **차감 모델**이고, 구독은 차감 대상이 아니라 행을 만들어내는 설정이므로 별개 개념이다. 합치기 결정과 모순되지 않는다.
+횟수권과 월 정액을 한 테이블로 합친 결정(PRD 0)은 그대로다. 합친 것은 **차감 모델**이고, 월 정액 등록 정보는 차감 대상이 아니라 행을 만들어내는 설정이다. 그래서 `entitlement`에 섞지 않고 `subscription`으로 뺐다. 같은 테이블에 두면 PRD 3 AC 1.3.5의 "유효한 것 중 만료가 가장 이른 1장"에 등록 정보 행도 걸려 거기서 차감될 수 있다.
 
-여기에 주기별 자동 생성 배치가 따라온다. 회원 15명에 주 2회면 매주 15줄이라 수기 생성이 불가능하다. PRD 1 열린 질문에 이미 기록돼 있다. 횟수권으로 확정되면 `source_id`는 계속 NULL로 남고 이 절 전체가 해당 없음이 된다.
+`entitlement_source_shape`가 "월 정액 행은 반드시 등록을 가리키고, 횟수권 행은 아무것도 가리키지 않는다"를 강제한다.
+
+**주기 계산.** 주기는 `starts_on`부터 센다(PRD 1 AC 3.2.7). 주 단위면 7일씩, 월 단위면 한 달씩이다. `ends_on`은 등록할 때 마지막 주기의 끝으로 계산해 저장한다. 월 단위에서 시작일이 29~31일일 때 짧은 달을 어떻게 셀지는 정하지 않았다(열린 질문 Q12).
+
+**주기별 수강권 생성.** 등록할 때와 매일 1회 배치에서 같은 쿼리를 돈다. 오픈 범위 안의 수업을 예약할 수 있어야 하므로, 오늘부터 그 강사의 오픈 범위 끝까지에 걸치는 주기를 미리 만든다(AC 3.2.8). `ends_on`을 넘는 주기는 만들지 않는다(AC 3.2.9). `entitlement_period_uidx`와 `INSERT ... ON CONFLICT DO NOTHING`으로 몇 번을 돌려도 중복이 생기지 않는다. 절차는 [수강권 쓰기 경로](../../entitlement/write-paths.md)에 있다.
+
+**종류 겹침 검사의 한계.** `entitlement_kind_no_overlap`은 이미 만들어진 행끼리만 비교한다. 월 정액의 뒤쪽 주기는 아직 행이 없으므로, 그 기간에 횟수권을 등록하면 DB가 막지 못하고 나중에 배치의 INSERT가 실패한다. 그래서 등록할 때 애플리케이션이 `subscription.starts_on ~ ends_on` 전체 기간과 비교한다. 제약은 그 검사가 뚫렸을 때의 마지막 방어선이다. 결정 근거는 [BE-ADR-0009](../../../decisions/0009-entitlement-kind-exclusion.md).
 
 ### 마이그레이션
 
@@ -264,7 +345,7 @@ PRD 단위가 배포 단위는 아니다. 1차 배포에는 PRD 1~3이 함께 �
 
 | 마이그레이션 | 내용 | 시점 |
 |---|---|---|
-| 001 | instructor, setting(open_range_days), recurrence, class, member, member_link, entitlement | PRD 1 |
+| 001 | btree_gist 확장, instructor, instructor_session, setting(open_range_days), recurrence, class_slot, member, member_link, subscription, entitlement | PRD 1 |
 
 ## AC 대 제약
 
@@ -274,13 +355,23 @@ PRD 단위가 배포 단위는 아니다. 1차 배포에는 PRD 1~3이 함께 �
 |---|---|---|
 | (제품 형태) | 강사끼리 데이터가 섞이지 않음 | `member.instructor_id`, `recurrence.instructor_id`, `setting` PK |
 | 1 · AC 2.1.1 | 정원 1 이상 50 이하 | `recurrence` CHECK capacity BETWEEN 1 AND 50 |
-| 1 · AC 2.1.3 | 같은 규칙 재저장해도 슬롯 중복 없음 | `class` UNIQUE (recurrence_id, starts_at) |
+| 1 · AC 1.1.6 | 세션 2주, 요청마다 연장 | `instructor_session.expires_at` 조건부 UPDATE |
+| 1 · AC 1.1.7 | 로그아웃 즉시 무효 | `instructor_session.revoked_at` |
+| 1 · AC 1.2.3 | 같은 카카오 계정은 한 번만 가입 | `instructor_identity_uk` (provider, provider_user_id) |
+| 1 · AC 1.3.1 | 강사는 자기 데이터만 | `member.instructor_id`, `recurrence.instructor_id`. 모든 강사 화면 쿼리에 소유자 조건 |
+| 1 · AC 2.1.3 | 같은 규칙 재저장해도 슬롯 중복 없음 | `class_slot` UNIQUE (recurrence_id, starts_at) |
 | 1 · AC 2.2.2 | 배치를 여러 번 돌려도 결과 동일 | 위 유니크 + INSERT ... ON CONFLICT DO NOTHING |
-| 1 · AC 2.3.1 | 휴강. 예약이 있으면 확인 창 | `class.canceled_at` + `booking.cancel_reason` (처리는 write-paths 5.2) |
-| 1 · AC 2.3.3 | 삭제 · 변경은 해당 슬롯에만 | `recurrence`와 `class`를 분리. 규칙은 안 건드린다 |
+| 1 · AC 2.3.1 | 휴강. 예약이 있으면 확인 창 | `class_slot.canceled_at` + `booking.cancel_reason` (처리는 write-paths 5.2) |
+| 1 · AC 2.3.2 | 예약이 있는 슬롯은 시각 변경 불가 | 애플리케이션 검사. `class_slot.taken > 0`이면 거부 |
+| 1 · AC 2.3.3 | 삭제 · 변경은 해당 슬롯에만 | `recurrence`와 `class_slot`을 분리. 규칙은 안 건드린다 |
 | 1 · AC 2.4.1 | 오픈 범위 7~28일 | `setting` CHECK open_range_days BETWEEN 7 AND 28 |
 | 1 · AC 3.1.2 | 동명이인 허용 | `member.name`에 UNIQUE 없음 (의도적 부재) |
 | 1 · AC 3.2.3 | 잔여는 0 이상 max_count 이하 | `entitlement` CHECK used_count 범위 |
+| 1 · AC 3.2.6 | 월 정액 입력값 | `subscription` CHECK period_unit · count_per_period · period_count |
+| 1 · AC 3.2.8 | 주기별 수강권 자동 생성, 중복 없음 | `entitlement_period_uidx` (source_id, window_start) |
+| 1 · AC 3.2.9 | 마지막 주기 뒤로는 만들지 않음 | `subscription.ends_on` |
+| 1 · AC 3.2.10 | 다른 종류 기간 겹침 금지 | `entitlement_kind_no_overlap` EXCLUDE + 등록 시 애플리케이션 검사 |
+| 1 · AC 3.2.11 | 같은 종류는 겹쳐도 됨 | 위 EXCLUDE가 `kind WITH <>`라 같은 종류는 비교하지 않음 |
 | 1 · AC 3.3.1 | 수강 종료는 삭제가 아님 | `member.status` ENDED. DELETE 경로 없음 |
 | 1 · AC 4.1.2 | 해시만 저장 | `member_link`에 원본 토큰 컬럼 없음 |
 | 1 · AC 4.3.1 | 재발급 시 이전 링크 무효 | `revoked_at` · member당 유효 링크 1개 부분 유니크 |
@@ -293,26 +384,16 @@ PRD 단위가 배포 단위는 아니다. 1차 배포에는 PRD 1~3이 함께 �
 
 | # | 질문 | 영향 |
 |---|---|---|
-| Q1 | `class` 테이블을 `class_slot`으로 개명할 것인가 | `class`는 **Java 예약어**이고 `Class`는 `java.lang.Class`와 충돌한다. mermaid erDiagram에서도 예약어로 걸려 그림에서만 이름이 다르다. 개명하면 PRD 1 본문의 용어표도 같이 고쳐야 한다. 대안은 `scheduled_class` |
-| Q2 | ~~같은 요일 · 시각의 규칙 2개 허용~~ **해소** | `recurrence (instructor_id, weekday, start_time) WHERE active` 부분 유니크로 금지했다 |
-| Q3 | `recurrence.capacity`를 바꾸면 이미 생성된 슬롯은 | AC에 없다. 현재 설계는 "안 바뀐다". 강사가 기대하는 동작과 다를 수 있다 |
-| Q4 | 타임존 'Asia/Seoul'을 상수로 박을 것인가 | 강사가 여러 명이 되었으므로 `setting`에 컬럼을 두는 쪽이 안전하다. 국내 강사만 받을 것이면 상수로도 된다 |
-| Q5 | `entitlement.kind`를 인터뷰 전에 어느 쪽으로 둘 것인가 | PRD 1 AC 3.2.2. 차감 · 조회 스키마는 어느 쪽이든 같다. 월 정액이면 `subscription` 테이블과 주기 배치가 PRD 1 범위에 들어온다 |
-| Q7 | PK를 bigserial로 둘 것인가 | 강사당 회원 15~20명 규모면 충분하다. `class_id`는 URL에 노출되지만 비밀이 아니다. 비밀인 것은 `member_link.token_hash` 하나뿐이고 그것만 난수다 |
-| Q8 | OAuth provider를 무엇으로 할 것인가 | 현재 CHECK는 `GOOGLE`, `KAKAO` 둘이다. 국내 개인 강사 대상이면 카카오가 자연스럽다. 늘리면 CHECK만 고치면 된다 |
-| Q9 | 가입을 열어둘 것인가 | 누구나 가입하면 빈 계정이 쌓인다. 초기에는 초대 코드나 승인을 둘 수 있다. 스키마에는 영향이 작다 |
-| Q10 | 휴강 통보를 어떻게 할 것인가 | 휴강 트랜잭션은 강사가 카톡으로 하는 것을 전제한다. 회원이 링크를 열기 전까지 모른다는 뜻이다. 자동 알림은 PRD 0에서 범위 밖 |
-
-## 이전 메모 · PRD 본문과 달라진 부분
-
-> 2차에서 PRD 본문을 고치면 이 절은 지운다.
-
-PRD 1~5가 "강사 1명 · 계정 1개"로 쓰였을 때 작성됐다. 제품 형태가 정해지면서 아래가 달라졌고, PRD 본문도 같이 고쳐야 한다.
-
-| 항목 | PRD 본문 | 이 문서 |
-|---|---|---|
-| 강사 계정 | PRD 1 기능 1 "단일 계정. 아이디 · 비밀번호" | **OAuth 가입.** 강사마다 1행. `password_hash` 없음 |
-| 비밀번호 재설정 | PRD 1 AC 1.1.4 "운영자가 수동으로 처리" | **해당 없음.** 비밀번호를 보관하지 않는다 |
-| 설정 단위 | PRD 5 AC 1.1.2 "전역 설정 1개" | **강사당 1개** |
-| 데이터 격리 | 언급 없음 | `member` · `recurrence`에 `instructor_id` |
-| 휴강 시 예약 | PRD 1 AC 2.3.1이 "PRD 3에서 정의"라 했으나 **PRD 3에 없음** | **write-paths 5.2에 정의.** 전부 취소하고 마감과 무관하게 전부 복구 |
+| ~~Q1~~ | ~~`class` 테이블을 `class_slot`으로 개명할 것인가~~ | **해소.** `class_slot`으로 개명([BE-ADR-0007](../../../decisions/0007-class-slot-naming.md)) |
+| ~~Q2~~ | ~~같은 요일 · 시각의 규칙 2개 허용~~ | **해소.** `recurrence (instructor_id, weekday, start_time) WHERE active` 부분 유니크로 금지 |
+| ~~Q3~~ | ~~`recurrence.capacity`를 바꾸면 이미 생성된 슬롯은~~ | **해소.** 안 바뀐다. 생성 시점 복사를 유지([BE-ADR-0005](../../../decisions/0005-snapshot-capacity.md)) |
+| ~~Q4~~ | ~~타임존을 상수로 박을 것인가~~ | **해소.** `Asia/Seoul` 상수. 국내 강사만 받는 동안 유지([BE-ADR-0006](../../../decisions/0006-time-and-timezone.md)) |
+| ~~Q5~~ | ~~`entitlement.kind`를 어느 쪽으로 둘 것인가~~ | **해소.** 둘 다 지원([DEC-0004](https://github.com/Fit-link-v2/Fit-link-PRD/blob/main/decisions/0004-entitlement-pass-and-subscription.md)). `subscription` 테이블과 주기 배치가 이 기능에 들어왔다 |
+| Q7 | PK를 bigserial로 둘 것인가 | 강사당 회원 15~20명 규모면 충분하다. `class_slot_id`는 URL에 노출되지만 비밀이 아니다. 비밀인 것은 `member_link.token_hash` 하나뿐이고 그것만 난수다 |
+| ~~Q8~~ | ~~OAuth provider를 무엇으로 할 것인가~~ | **해소.** 카카오([DEC-0001](https://github.com/Fit-link-v2/Fit-link-PRD/blob/main/decisions/0001-instructor-kakao-oauth.md)). CHECK는 `KAKAO` 하나 |
+| ~~Q9~~ | ~~가입을 열어둘 것인가~~ | **해소.** 개방([DEC-0001](https://github.com/Fit-link-v2/Fit-link-PRD/blob/main/decisions/0001-instructor-kakao-oauth.md)) |
+| Q10 | 휴강 통보를 어떻게 할 것인가 | 강사가 카톡으로 한다([DEC-0006](https://github.com/Fit-link-v2/Fit-link-PRD/blob/main/decisions/0006-booking-rules.md)). 회원이 링크를 열기 전까지 모른다. 자동 알림은 PRD 0에서 범위 밖 |
+| Q11 | 세션 저장을 직접 만들지, Spring Session JDBC를 쓸지 | [BE-ADR-0008](../../../decisions/0008-session-store.md) (proposed) |
+| Q12 | 월 단위 주기에서 시작일이 29~31일이면 짧은 달을 어떻게 세나 | `ends_on`과 주기별 `window_start`·`window_end` 계산이 달라진다. PRD 1 열린 질문과 같다 |
+| Q13 | 월 정액을 중간에 끝내면 | 남은 주기, 이미 만든 수강권, 그 수강권으로 잡은 예약을 어떻게 할지. 정하기 전까지 `subscription`에는 종료 컬럼을 두지 않는다 |
+| Q14 | 카카오 이메일을 못 받으면 | 비즈 앱 전환이 막히면 `instructor.email`이 계속 비어 있다. 스키마는 이미 NULL을 허용한다 |

@@ -10,8 +10,8 @@ PRD 3 AC 1.3과 PRD 4 AC 3.2가 같은 트랜잭션이다. 대기 승계도 별�
 
 ```mermaid
 flowchart TD
-    A["예약 요청<br/>member_id, class_id"] --> B["BEGIN"]
-    B --> C{"UPDATE class<br/>SET taken = taken + 1<br/>WHERE taken < capacity<br/>AND starts_at > now()"}
+    A["예약 요청<br/>member_id, class_slot_id"] --> B["BEGIN"]
+    B --> C{"UPDATE class_slot<br/>SET taken = taken + 1<br/>WHERE taken < capacity<br/>AND starts_at > now()"}
     C -->|"0행"| C1["409 SEAT_TAKEN<br/>또는 422 CLASS_STARTED"]
     C -->|"1행"| D{"UPDATE entitlement<br/>SET used_count = used_count + 1<br/>WHERE used_count < max_count<br/>AND 수업일 IN window"}
     D -->|"0행"| D1["422 NO_REMAINING"]
@@ -35,7 +35,7 @@ PostgreSQL 문서 기준으로, 같은 행을 다른 트랜잭션이 수정 중�
 
 > 변경 이력 (구현 전, 설계상 관련 기능): [0003](0003-booking/prd.md) · [0004](0004-waitlist/prd.md)
 
-PRD 1 AC 2.3.1이 "예약 처리 규칙은 PRD 3에서 정의한다"고 했으나 PRD 3에 없다. 여기서 정의한다.
+PRD 3 US 7([DEC-0006](https://github.com/Fit-link-v2/Fit-link-PRD/blob/main/decisions/0006-booking-rules.md))의 트랜잭션이다. 대기 취소(4번 문장)는 기능 0004가 붙인다.
 
 **규칙.** 강사 사정으로 수업이 없어지는 것이므로 회원에게 불이익이 없다. 취소 마감과 무관하게 차감을 전부 복구한다.
 
@@ -46,11 +46,11 @@ flowchart TD
     B -->|"있음"| D["확인 창<br/>예약 N건이 취소되고<br/>차감이 모두 복구됩니다"]
     D --> E["BEGIN"]
     C --> E
-    E --> F["1. UPDATE class<br/>canceled_at = now()"]
+    E --> F["1. UPDATE class_slot<br/>canceled_at = now()"]
     F --> G["2. UPDATE entitlement<br/>used_count -1<br/>ACTIVE 예약이 쓴 수강권 전부"]
     G --> H["3. UPDATE booking<br/>CANCELED · restored = true<br/>cancel_reason = INSTRUCTOR"]
     H --> I["4. UPDATE waitlist<br/>WAITING을 CANCELED로"]
-    I --> J["5. UPDATE class<br/>taken = 0"]
+    I --> J["5. UPDATE class_slot<br/>taken = 0"]
     J --> K["COMMIT"]
     K --> L["강사가 카톡으로 통보<br/>수동 · MVP"]
 ```
@@ -58,31 +58,31 @@ flowchart TD
 ```sql
 BEGIN;
 
-UPDATE class SET canceled_at = now()
- WHERE id = $class_id AND canceled_at IS NULL;
+UPDATE class_slot SET canceled_at = now()
+ WHERE id = $class_slot_id AND canceled_at IS NULL;
 -- 0행이면 이미 휴강. 롤백하고 종료
 
 UPDATE entitlement e SET used_count = e.used_count - 1
   FROM booking b
- WHERE b.class_id = $class_id AND b.status = 'ACTIVE'
+ WHERE b.class_slot_id = $class_slot_id AND b.status = 'ACTIVE'
    AND e.id = b.entitlement_id;
 
 UPDATE booking
    SET status = 'CANCELED', canceled_at = now(),
        restored = true, cancel_reason = 'INSTRUCTOR'
- WHERE class_id = $class_id AND status = 'ACTIVE';
+ WHERE class_slot_id = $class_slot_id AND status = 'ACTIVE';
 
 UPDATE waitlist SET status = 'CANCELED', canceled_at = now()
- WHERE class_id = $class_id AND status = 'WAITING';
+ WHERE class_slot_id = $class_slot_id AND status = 'WAITING';
 
-UPDATE class SET taken = 0 WHERE id = $class_id;
+UPDATE class_slot SET taken = 0 WHERE id = $class_slot_id;
 
 COMMIT;
 ```
 
 `taken`을 0으로 되돌리는 이유는 "`taken` = ACTIVE 예약 수"라는 관계를 깨지 않기 위해서다. 휴강된 슬롯은 회원 화면에 나오지 않으므로 값 자체는 쓰이지 않지만, 두 값이 어긋난 채 남으면 나중에 대조할 때 혼란이 된다.
 
-**개별 슬롯의 시각 변경(AC 2.3.2)은 예약이 있으면 막는다.** 회원이 예약한 시각과 실제 시각이 달라지는데, 알림이 범위 밖이라 알릴 방법이 없다. 시각을 바꿔야 하면 휴강 후 새 슬롯을 만든다.
+**개별 슬롯의 시각 변경(PRD 1 AC 2.3.2)은 예약이 있으면 막는다([DEC-0006](https://github.com/Fit-link-v2/Fit-link-PRD/blob/main/decisions/0006-booking-rules.md)).** 회원이 예약한 시각과 실제 시각이 달라지는데, 알림이 범위 밖이라 알릴 방법이 없다. 시각을 바꿔야 하면 휴강 후 새 슬롯을 만든다.
 
 통보는 MVP에서 강사가 카톡으로 한다. PRD 4의 대기 통보와 같은 방식이다.
 

@@ -1,6 +1,6 @@
 # BE-0004 개발 PRD · 대기·승계
 
-> **1차 이전본.** Notion "테이블 설계 · ERD" 문서에서 이 기능에 해당하는 부분을 잘라 옮겼다. 내용은 원문 그대로다. [템플릿](../../../templates/prd.md) 형식으로 다시 쓰고 회의 결정을 반영하는 건 2차에서 한다.
+> Notion "테이블 설계 · ERD" 문서에서 이 기능에 해당하는 부분을 옮긴 뒤, 2026-09-25 회의 결정([DEC-0001~0006](https://github.com/Fit-link-v2/Fit-link-PRD/tree/main/decisions))을 반영했다. 아직 recatch-tdd prd 단계 전이다. [템플릿](../../../templates/prd.md) 형식(인수 조건 · API 절)으로 다시 쓰는 것은 이 기능의 prd 단계에서 한다.
 
 ## 근거
 
@@ -17,7 +17,7 @@
 CREATE TABLE waitlist (
   id                   bigserial   PRIMARY KEY,
   member_id            bigint      NOT NULL REFERENCES member(id),
-  class_id             bigint      NOT NULL REFERENCES class(id),
+  class_slot_id             bigint      NOT NULL REFERENCES class_slot(id),
   status               text        NOT NULL DEFAULT 'WAITING'
                          CHECK (status IN ('WAITING', 'CANCELED', 'CONVERTED')),
   converted_booking_id bigint      REFERENCES booking(id),
@@ -29,11 +29,11 @@ CREATE TABLE waitlist (
 );
 
 CREATE UNIQUE INDEX waitlist_waiting_uidx
-  ON waitlist (member_id, class_id) WHERE status = 'WAITING';
+  ON waitlist (member_id, class_slot_id) WHERE status = 'WAITING';
 
 -- 순번은 이 인덱스 순서로 ROW_NUMBER()를 매겨 계산한다.
 CREATE INDEX waitlist_order_idx
-  ON waitlist (class_id, created_at) WHERE status = 'WAITING';
+  ON waitlist (class_slot_id, created_at) WHERE status = 'WAITING';
 ```
 
 `waitlist`에 순번 컬럼이 없다. 가운데 대기자가 빠질 때마다 뒷사람 번호를 다시 쓰는 UPDATE가 필요해지고, 그 사이에 등록이 들어오면 번호가 겹친다. 조회 시점에 계산하면 이 경쟁 자체가 생기지 않는다.
@@ -53,7 +53,8 @@ PRD 단위가 배포 단위는 아니다. 1차 배포에는 PRD 1~3이 함께 �
 | PRD · AC | 요구 | 물리 제약 |
 |---|---|---|
 | 4 · AC 1.1.3 | 대기는 차감하지 않음 | `waitlist`에 entitlement_id 없음 |
-| 4 · AC 1.1.4 | 대기 중복 등록 차단 | 부분 유니크 (member_id, class_id) WHERE WAITING |
-| 4 · AC 2.1.2 | 순번은 created_at 오름차순 | 순번 컬럼 없음. 인덱스 (class_id, created_at) |
+| 4 · AC 1.1.4 | 대기 중복 등록 차단 | 부분 유니크 (member_id, class_slot_id) WHERE WAITING |
+| 4 · AC 2.1.2 | 순번은 created_at 오름차순 | 순번 컬럼 없음. 인덱스 (class_slot_id, created_at) |
 | 4 · AC 2.2.2 | 취소 시 뒤 순번 자동 감소 | 계산값이므로 저장 갱신 없음 |
 | 4 · AC 3.2.2 | 승계 기록 | `waitlist.converted_booking_id` |
+| 3 · AC 7.2.3 | 휴강하면 대기 전부 취소 | 휴강 트랜잭션이 `WAITING`을 `CANCELED`로 ([쓰기 경로 5.2](../write-paths.md)) |
