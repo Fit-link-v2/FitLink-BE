@@ -1,0 +1,6 @@
+domain: analytics
+title: 관측
+owner: be
+tables:
+  - name: event_log
+    introduced-in: "0003"

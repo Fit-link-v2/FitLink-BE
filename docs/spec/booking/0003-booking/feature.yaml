@@ -1,0 +1,10 @@
+feature: "0003"
+title: 예약·취소
+prd: PRD-0003
+prd-url: https://github.com/Fit-link-v2/Fit-link-PRD/tree/main/prd/0003-booking
+owning-domain: booking
+participating-domains: [entitlement, schedule, analytics]
+status: planned          # planned | designing | in-progress | done | deferred | withdrawn
+extends: null           # 후속 작업이면 앞 기능 번호. 예: "0004"
+created: 2026-09-30
+decisions: []

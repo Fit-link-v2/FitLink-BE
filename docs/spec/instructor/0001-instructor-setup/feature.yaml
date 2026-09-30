@@ -1,0 +1,10 @@
+feature: "0001"
+title: 강사 세팅
+prd: PRD-0001
+prd-url: https://github.com/Fit-link-v2/Fit-link-PRD/tree/main/prd/0001-instructor-setup
+owning-domain: instructor
+participating-domains: [schedule, membership, entitlement]
+status: planned          # planned | designing | in-progress | done | deferred | withdrawn
+extends: null           # 후속 작업이면 앞 기능 번호. 예: "0004"
+created: 2026-09-30
+decisions: []

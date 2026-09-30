@@ -1,0 +1,10 @@
+feature: "NNNN"                      # PRD 번호. 폴더 이름 앞 4자리와 같다
+title: 기능 제목
+prd: PRD-NNNN
+prd-url: https://github.com/Fit-link-v2/Fit-link-PRD/tree/main/prd/NNNN-slug
+owning-domain: booking               # 폴더가 놓이는 도메인 1개
+participating-domains: []            # 같이 건드리는 도메인
+status: planned                      # planned | designing | in-progress | done | deferred | withdrawn
+extends: null                        # 후속 작업이면 앞 기능 번호. 예: "0004"
+created: YYYY-MM-DD
+decisions: []                        # BE-ADR-NNNN, DEC-NNNN

@@ -1,0 +1,10 @@
+domain: entitlement
+title: 수강권
+owner: be
+tables:
+  - name: entitlement
+    introduced-in: "0001"
+  - name: entitlement_adjustment
+    introduced-in: "0003"
+  - name: subscription
+    introduced-in: "미정"

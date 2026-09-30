@@ -1,0 +1,6 @@
+domain: booking          # 영문 단수 명사. 바꾸지 않는다
+title: 예약
+owner: be
+tables:
+  - name: booking
+    introduced-in: "NNNN"

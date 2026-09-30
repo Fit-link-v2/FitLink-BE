@@ -1,0 +1,8 @@
+domain: booking
+title: 예약
+owner: be
+tables:
+  - name: booking
+    introduced-in: "0003"
+  - name: waitlist
+    introduced-in: "0004"

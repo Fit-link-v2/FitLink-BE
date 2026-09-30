@@ -1,0 +1,17 @@
+# AC 계약. 테스트가 무엇을 증명해야 하는지의 원본.
+# id는 한 번 정하면 바꾸지 않는다. 삭제할 AC는 지우지 말고 status: removed
+spec: docs/spec/{domain}/NNNN-slug/prd.md
+version: 1
+criteria:
+  - id: AC-1
+    source: [PRD-NNNN AC N.N.N]      # 근거 제품 AC. 여러 개 가능
+    description: "사람이 읽는 의도"
+    type: behavior                   # validation | behavior | integration | performance | security
+    layers: [schema, api, test]      # schema | api | domain | test
+    assertion: "구체적이고 검증 가능한 단언"
+    priority: must                   # must | should | could
+    verify: machine                  # machine | inspection | manual
+    status: active                   # active | removed
+    failure_modes:                   # 선택
+      - symptom: "관찰 가능한 실패 신호"
+        cause: "검증 가능한 원인 가설"

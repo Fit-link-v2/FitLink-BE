@@ -1,0 +1,8 @@
+domain: membership
+title: 회원
+owner: be
+tables:
+  - name: member
+    introduced-in: "0001"
+  - name: member_link
+    introduced-in: "0001"

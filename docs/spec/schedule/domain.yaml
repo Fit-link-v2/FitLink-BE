@@ -1,0 +1,8 @@
+domain: schedule
+title: 시간표
+owner: be
+tables:
+  - name: recurrence
+    introduced-in: "0001"
+  - name: class
+    introduced-in: "0001"

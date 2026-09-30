@@ -1,0 +1,10 @@
+domain: instructor
+title: 강사
+owner: be
+tables:
+  - name: instructor
+    introduced-in: "0001"
+  - name: setting
+    introduced-in: "0001"
+  - name: instructor_session
+    introduced-in: "미정"
