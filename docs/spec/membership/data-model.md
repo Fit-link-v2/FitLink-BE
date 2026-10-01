@@ -56,11 +56,13 @@ SELECT c.id, c.starts_at, c.capacity - c.taken AS remaining
   JOIN setting    s ON s.instructor_id = r.instructor_id
  WHERE r.instructor_id = $그_강사
    AND c.canceled_at IS NULL
-   AND c.starts_at >= now()
-   AND c.starts_at <  now() + (s.open_range_days || ' days')::interval;
+   AND c.starts_at >= $today_start                                  -- 오늘 0시 (Asia/Seoul)
+   AND c.starts_at <  $today_start + make_interval(days => s.open_range_days);
 ```
 
-오픈 범위도 강사별 설정에서 읽는다.
+오픈 범위도 강사별 설정에서 읽는다. 범위는 날짜 단위 `[오늘, 오늘 + N일)`이다. `$today_start`는 `Asia/Seoul` 기준 오늘 0시를 `timestamptz`로 바꾼 값이다. 오늘 이미 시작한 수업도 목록에 나오고 회색으로 표시된다(PRD 2 AC 3.2.3).
+
+`make_interval(days => N)`은 일 단위 간격이라, 서머타임이 없는 `Asia/Seoul`에서는 N일 뒤 0시와 같다.
 
 ### 미개봉 회원 수
 

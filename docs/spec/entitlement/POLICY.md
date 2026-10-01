@@ -13,4 +13,5 @@
 | [0001](../instructor/0001-instructor-setup/prd.md) | 강사 세팅 | 참여 | planned |
 | [0002](../membership/0002-member-view/prd.md) | 회원 조회 | 참여 | planned |
 | [0003](../booking/0003-booking/prd.md) | 예약·취소 | 참여 | planned |
+| [0004](../booking/0004-waitlist/prd.md) | 대기·승계 | 참여 | planned |
 | [0005](../booking/0005-cancel-deadline/prd.md) | 취소 마감 규칙 | 참여 | planned |

@@ -17,9 +17,11 @@ source: [PRD-0003 AC 1.3.1, PRD-0000 "범위"]
 `class_slot.taken` 컬럼을 두고 조건부 UPDATE 한 문장으로 판정한다.
 
 ```sql
-UPDATE class_slot SET taken = taken + 1
- WHERE id = $1 AND taken < capacity AND starts_at > now();
--- 0행이면 SEAT_TAKEN 또는 CLASS_STARTED
+UPDATE class_slot c SET taken = taken + 1
+  FROM recurrence r
+ WHERE c.id = $1 AND r.id = c.recurrence_id AND r.instructor_id = $2
+   AND c.taken < c.capacity AND c.starts_at > now() AND c.canceled_at IS NULL;
+-- 0행이면 SEAT_TAKEN · CLASS_STARTED · 휴강 · 남의 슬롯 중 하나
 ```
 
 PostgreSQL은 같은 행을 다른 트랜잭션이 고치는 중이면 두 번째 UPDATE를 기다리게 한 뒤, 갱신된 행에 WHERE 조건을 다시 평가한다. 그래서 낡은 값으로 판단하고 쓰는 일이 생기지 않는다.
@@ -34,6 +36,7 @@ PostgreSQL은 같은 행을 다른 트랜잭션이 고치는 중이면 두 번�
 
 ## 대가
 
+- 모든 경로가 `class_slot` 행을 먼저 잠근다는 규칙을 지켜야 한다. 잠금 순서가 경로마다 다르면 교착이 생긴다
 - 같은 사실이 두 곳에 있다. `taken`은 그 슬롯의 ACTIVE 예약 수와 같아야 한다
 - CHECK는 상한만 막고 두 값이 같다는 것은 보장하지 않는다. 그래서 예약 · 취소 · 휴강 세 경로가 **모두 한 트랜잭션 안에서** 두 값을 같이 바꿔야 한다
 - 어긋나면 대조 · 보정 작업이 필요하다

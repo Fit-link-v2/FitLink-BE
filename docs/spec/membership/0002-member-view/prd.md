@@ -14,4 +14,4 @@
 |---|---|---|
 | 2 · AC 1.1.3 | 최초 1회 기록 · 매 요청 갱신 | `first_opened_at`과 `last_used_at`을 분리 |
 | 2 · AC 3.2.5 | 휴강 슬롯은 표시하지 않음 | `class_slot.canceled_at` soft delete + 부분 인덱스 |
-| 2 · AC 2.1.2 | 월 정액이면 이번 주기 N회 중 M회 | 오늘을 덮는 `kind = 'SUBSCRIPTION'` 행 1개의 `max_count`와 `used_count` |
+| 2 · AC 2.1.2 | 월 정액이면 이번 주기 N회 중 M회 | 오늘을 덮는 `kind = 'SUBSCRIPTION'` 행의 `max_count`와 `used_count`. 같은 종류 겹침이 허용되므로(PRD 1 AC 3.2.11) 행이 여러 개일 수 있다. 합산할지 가장 이른 것을 보일지는 열린 질문 |

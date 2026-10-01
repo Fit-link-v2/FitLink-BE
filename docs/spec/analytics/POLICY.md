@@ -11,3 +11,4 @@
 | 기능 | 제목 | 이 도메인 | 상태 |
 |---|---|---|---|
 | [0003](../booking/0003-booking/prd.md) | 예약·취소 | 참여 | planned |
+| [0004](../booking/0004-waitlist/prd.md) | 대기·승계 | 참여 | planned |

@@ -17,6 +17,12 @@ PRD 단위가 배포 단위는 아니다. 1차 배포에는 PRD 1~3이 함께 �
 |---|---|---|
 | 004 | setting.cancel_deadline_hours 추가 | PRD 5 |
 
+```sql
+ALTER TABLE setting
+  ADD COLUMN cancel_deadline_hours int NOT NULL DEFAULT 3
+    CHECK (cancel_deadline_hours BETWEEN 0 AND 72);
+```
+
 `booking.restored`는 휴강이 PRD 3으로 옮겨가면서 002(기능 0003)로 앞당겨졌다([BE-ADR-0010](../../../decisions/0010-restored-in-0003.md)). 그래서 004에는 컬럼 하나만 남는다. `cancel_deadline_hours`는 기본값이 있는 NOT NULL 컬럼이라 기존 강사 행에도 한 문장으로 들어간다. 이 기능부터 회원의 마감 후 취소가 `restored = false`를 쓴다.
 
 ## AC 대 제약

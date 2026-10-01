@@ -20,7 +20,7 @@
 | [0001](spec/instructor/0001-instructor-setup/prd.md) | 강사 세팅 | instructor | schedule · membership · entitlement | planned |
 | [0002](spec/membership/0002-member-view/prd.md) | 회원 조회 | membership | schedule · entitlement | planned |
 | [0003](spec/booking/0003-booking/prd.md) | 예약·취소 | booking | entitlement · schedule · analytics | planned |
-| [0004](spec/booking/0004-waitlist/prd.md) | 대기·승계 | booking | schedule | planned |
+| [0004](spec/booking/0004-waitlist/prd.md) | 대기·승계 | booking | schedule · entitlement · analytics | planned |
 | [0005](spec/booking/0005-cancel-deadline/prd.md) | 취소 마감 규칙 | booking | instructor · entitlement | planned |
 
 ## 아키텍처

@@ -17,7 +17,7 @@
 CREATE TABLE waitlist (
   id                   bigserial   PRIMARY KEY,
   member_id            bigint      NOT NULL REFERENCES member(id),
-  class_slot_id             bigint      NOT NULL REFERENCES class_slot(id),
+  class_slot_id        bigint      NOT NULL REFERENCES class_slot(id),
   status               text        NOT NULL DEFAULT 'WAITING'
                          CHECK (status IN ('WAITING', 'CANCELED', 'CONVERTED')),
   converted_booking_id bigint      REFERENCES booking(id),
@@ -25,7 +25,9 @@ CREATE TABLE waitlist (
   canceled_at          timestamptz,
 
   CONSTRAINT waitlist_converted_shape
-    CHECK ((status = 'CONVERTED') = (converted_booking_id IS NOT NULL))
+    CHECK ((status = 'CONVERTED') = (converted_booking_id IS NOT NULL)),
+  CONSTRAINT waitlist_canceled_shape
+    CHECK ((status = 'CANCELED') = (canceled_at IS NOT NULL))
 );
 
 CREATE UNIQUE INDEX waitlist_waiting_uidx

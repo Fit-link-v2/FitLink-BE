@@ -18,7 +18,7 @@ erDiagram
     SETTING {
         bigint instructor_id PK
         int open_range_days "기본 14"
-        int cancel_deadline_hours "기본 3"
+        int cancel_deadline_hours "기본 3 · 0005"
     }
     INSTRUCTOR_SESSION {
         bigint id PK
@@ -36,5 +36,5 @@ erDiagram
 | 테이블 | 도입 기능 |
 |---|---|
 | `instructor` | 0001 |
-| `setting` | 0001 |
+| `setting` | 0001 (`cancel_deadline_hours`는 0005) |
 | `instructor_session` | 0001 |

@@ -19,6 +19,7 @@ erDiagram
     CLASS_SLOT {
         bigint id PK
         bigint recurrence_id FK
+        date occurs_on "원래 날짜"
         timestamptz starts_at
         int capacity "생성 시점 복사"
         int taken "조건부 UPDATE 대상"
