@@ -1,6 +1,15 @@
 # 컨텍스트 맵
 
-도메인 6개가 서로 어떻게 연결되는지만 보여준다. 테이블 컬럼과 도메인 안의 관계는 각 도메인의 `data-model.md`에 있다.
+도메인 6개가 서로 어떻게 연결되는지만 보여준다. **테이블과 컬럼이 들어간 ERD는 도메인별로 나뉘어 있다.**
+
+| 도메인 | 테이블 | ERD |
+|---|---|---|
+| instructor | instructor · setting · instructor_session | [강사 ERD](../spec/instructor/data-model.md) |
+| schedule | recurrence · class_slot | [시간표 ERD](../spec/schedule/data-model.md) |
+| membership | member · member_link | [회원 ERD](../spec/membership/data-model.md) |
+| entitlement | entitlement · subscription · entitlement_adjustment | [수강권 ERD](../spec/entitlement/data-model.md) |
+| booking | booking · waitlist | [예약 ERD](../spec/booking/data-model.md) |
+| analytics | event_log | [관측 ERD](../spec/analytics/data-model.md) |
 
 ## 도메인 관계
 
