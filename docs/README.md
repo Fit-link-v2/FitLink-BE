@@ -1,5 +1,7 @@
 # FitLink BE 문서
 
+> 레포 소개는 [루트 README](../README.md). 이 폴더는 개발 레포 안의 설계 문서 자리다.
+
 백엔드의 **어떻게 만드는가(HOW)**를 다룬다. 무엇을 만드는지는 [Fit-link-PRD](https://github.com/Fit-link-v2/Fit-link-PRD)에 있다.
 
 ## 구조
