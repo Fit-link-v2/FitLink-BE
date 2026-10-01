@@ -7,4 +7,4 @@ participating-domains: [instructor, entitlement]
 status: planned          # planned | designing | in-progress | done | deferred | withdrawn
 extends: null           # 후속 작업이면 앞 기능 번호. 예: "0004"
 created: 2026-09-30
-decisions: []
+decisions: [DEC-0006, BE-ADR-0006, BE-ADR-0010]

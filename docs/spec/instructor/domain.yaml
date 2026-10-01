@@ -7,4 +7,4 @@ tables:
   - name: setting
     introduced-in: "0001"
   - name: instructor_session
-    introduced-in: "미정"
+    introduced-in: "0001"
