@@ -10,5 +10,5 @@
 
 | 기능 | 제목 | 이 도메인 | 상태 |
 |---|---|---|---|
-| [0001](../instructor/0001-instructor-setup/prd.md) | 강사 세팅 | 담당 | planned |
+| [0001](../instructor/0001-instructor-setup/prd.md) | 강사 세팅 | 담당 | designing |
 | [0005](../booking/0005-cancel-deadline/prd.md) | 취소 마감 규칙 | 참여 | planned |

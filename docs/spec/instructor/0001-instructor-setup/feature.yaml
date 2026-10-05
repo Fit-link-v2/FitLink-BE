@@ -4,7 +4,7 @@ prd: PRD-0001
 prd-url: https://github.com/Fit-link-v2/Fit-link-PRD/tree/main/prd/0001-instructor-setup
 owning-domain: instructor
 participating-domains: [schedule, membership, entitlement]
-status: planned          # planned | designing | in-progress | done | deferred | withdrawn
+status: designing        # planned | designing | in-progress | done | deferred | withdrawn
 extends: null           # 후속 작업이면 앞 기능 번호. 예: "0004"
 created: 2026-09-30
-decisions: [DEC-0001, DEC-0002, DEC-0003, DEC-0004, DEC-0006, BE-ADR-0005, BE-ADR-0006, BE-ADR-0007, BE-ADR-0008, BE-ADR-0009]
+decisions: [DEC-0001, DEC-0002, DEC-0003, DEC-0004, DEC-0006, DEC-0008, DEC-0009, DEC-0010, DEC-0011, BE-ADR-0005, BE-ADR-0006, BE-ADR-0007, BE-ADR-0008, BE-ADR-0009]
