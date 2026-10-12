@@ -107,12 +107,15 @@ PRD 단위가 배포 단위는 아니다. 1차 배포에는 PRD 1~3이 함께 �
 
 | PRD · AC | 요구 | 물리 제약 |
 |---|---|---|
+| 3 · AC 1.1.5 · 1.1.6 | 예약 가능 여부와 사유는 그 수업 날짜를 덮는 수강권으로 서버가 판정 | 물리 제약 없음. 수업마다 차감될 수강권(AC 1.3.5)을 찾아 판정한다. 화면 사유는 3종(덮는 수강권 없음, 횟수권 잔여 없음, 그 주기 한도 소진)이다. 서버 에러 코드를 NO_REMAINING 하나로 둘지 3종으로 나눌지는 API 설계에서 정한다. [DEC-0010](https://github.com/Fit-link-v2/Fit-link-PRD/pull/4) (proposed, BE 답 2026-10-12) |
 | 3 · AC 1.3.1 | 정원 초과 예약 불가 | 조건부 UPDATE + CHECK taken ≤ capacity |
 | 3 · AC 1.3.5 | 만료 이른 수강권 자동 선택 | 인덱스 (member_id, window_end) |
 | 3 · AC 3.1 | ALREADY_BOOKED | `booking` 부분 유니크 (member_id, class_slot_id) WHERE ACTIVE |
 | 3 · AC 7.3.2 · 5 · AC 4.3.1 | 지난 기록에 사유 표시 | `booking.cancel_reason` + `restored` |
 | 3 · AC 4.2.3 | 지난 기록 최근 30건 | 인덱스 (member_id, created_at DESC) |
 | 3 · AC 5.2.2 | 수정 시각과 이전 값 기록 | `entitlement_adjustment` 테이블 |
+| 3 · AC 5.2.3 | 월 정액은 진행 중인 주기만 수정 | 잔여 수정 UPDATE 조건에 `kind = 'PASS' OR (window_start <= $today AND $today <= window_end)`. 0행이면 다시 읽어 404 · PERIOD_NOT_CURRENT · REMAINING_OUT_OF_RANGE를 가린다([BE-0001 API 5절](../../instructor/0001-instructor-setup/prd.md)). [DEC-0010](https://github.com/Fit-link-v2/Fit-link-PRD/pull/4) (proposed, BE 답 2026-10-12) |
+| 3 · AC 1.2.3 · 1.2.4 | 확인 시트는 차감되는 그 수강권의 잔여 | 수업마다 차감될 수강권(AC 1.3.5)을 판정에 쓰고, 그 수강권의 잔여 · 주기 날짜 · 횟수(`max_count`)를 응답에 담는다. 월 정액 문구 "M/D~M/D N회 중 1회를 씁니다"의 N이 `max_count`다. [DEC-0010](https://github.com/Fit-link-v2/Fit-link-PRD/pull/4) (proposed, BE 답 2026-10-12) |
 | 3 · AC 1.5.1 | 같은 날 여러 예약 허용 | 날짜 단위 유니크 없음 (의도적 부재). 유니크는 (member_id, class_slot_id)뿐 |
 | 3 · AC 7.2.1 | 휴강 취소 사유 기록 | `booking.cancel_reason = 'INSTRUCTOR'` |
 | 3 · AC 7.2.2 | 휴강은 마감과 무관하게 복구 | `booking_instructor_cancel_restores` CHECK |

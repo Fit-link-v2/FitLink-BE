@@ -56,6 +56,7 @@ PRD 단위가 배포 단위는 아니다. 1차 배포에는 PRD 1~3이 함께 �
 |---|---|---|
 | 4 · AC 1.1.3 | 대기는 차감하지 않음 | `waitlist`에 entitlement_id 없음 |
 | 4 · AC 1.1.4 | 대기 중복 등록 차단 | 부분 유니크 (member_id, class_slot_id) WHERE WAITING |
+| 4 · AC 1.1.7 · 1.1.8 | 대기도 그 수업 날짜를 덮는 수강권의 잔여가 1 이상일 때만 | 물리 제약 없음. 대기 등록 트랜잭션에서 예약과 같은 판정([BE-0003](../0003-booking/prd.md)의 AC 1.1.5 · 1.1.6 행)을 하고, 걸리면 예약과 같은 코드로 거부한다. 코드를 세분할지는 예약과 함께 API 설계에서 정한다. 대기는 차감하지 않으므로(AC 1.1.3) 대기 뒤 다른 예약으로 잔여가 0이 되는 것은 막지 못한다. 그 경우 승계 예약이 NO_REMAINING으로 실패한다. [DEC-0010](https://github.com/Fit-link-v2/Fit-link-PRD/pull/4) (proposed, BE 답 2026-10-12) |
 | 4 · AC 2.1.2 | 순번은 created_at 오름차순 | 순번 컬럼 없음. 인덱스 (class_slot_id, created_at) |
 | 4 · AC 2.2.2 | 취소 시 뒤 순번 자동 감소 | 계산값이므로 저장 갱신 없음 |
 | 4 · AC 3.2.2 | 승계 기록 | `waitlist.converted_booking_id` |

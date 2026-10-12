@@ -498,14 +498,14 @@ PRD 단위가 배포 단위는 아니다. 1차 배포에는 PRD 1~3이 함께 �
 {
   "id": 7, "name": "김OO", "memo": "목요반", "status": "ACTIVE",
   "linkOpened": true,
-  "pass": { "remaining": 3 }          // 셀 횟수권이 없으면 null
+  "frontCard": EntitlementCard        // 맨 앞 카드 하나. 수강권이 없으면 null
 }
 
 // MemberDetail — I-10
 {
   "id": 7, "name": "김OO", "memo": "목요반", "status": "ACTIVE",
   "linkOpened": true,
-  "entitlements": [Entitlement]       // 5절
+  "cards": [EntitlementCard]          // 5절. 맨 앞이 다음에 차감될 수강권
 }
 ```
 
@@ -517,7 +517,7 @@ PRD 단위가 배포 단위는 아니다. 1차 배포에는 PRD 1~3이 함께 �
 - **회원 목록(I-07)**
   - `unopenedCount`는 링크를 열지 않은 ACTIVE 회원 수다. ENDED는 뺀다(AC 5.1.1). 0이면 FE가 배너를 숨긴다(AC 5.1.4)
   - `linkOpened`는 지금 살아 있는 링크의 `first_opened_at` 유무다. 재발급하면 `false`로 돌아간다(AC 5.1.3). `false`인 줄에 "미개봉"을 쓴다(AC 5.1.5, DEC-0009 (proposed)). ENDED 회원 줄에도 쓸지는 와이어프레임 대조 B-10
-  - `pass.remaining`은 오늘 유효한 횟수권(시작일 ≤ 오늘 ≤ 종료일)의 잔여 합계다 (제안). 회원 화면 상단 규칙(PRD-0002 AC 2.1.1 "합계")을 빌려 왔다. 시작일이 오늘 이후인 횟수권을 넣을지는 와이어프레임 대조 B-1과 같이 정한다
+  - 줄의 남은 횟수는 `frontCard`(회원 상세 `cards`의 맨 앞, 다음에 차감될 수강권)의 큰 글씨다. 횟수권이면 "6회 남음", 월 정액이면 지금 주기의 "2회 중 1회 남음"(DEC-0010 (proposed, BE 답 2026-10-12) 5번 A안, PRD-0001 열린 질문). 합산하지 않는다(같은 결정 1번). 수강권이 여러 개여도 줄에는 맨 앞 하나만 쓴다 (제안)
   - 정렬: 미개봉 → 나머지 ACTIVE → ENDED, 같은 묶음 안에서는 이름순 (제안). 와이어프레임 설명을 따랐고 근거 AC는 없다(I-07 노트)
 - **수강 종료 · 다시 활성화(I-10)**: `status`만 바꾼다. 삭제가 아니다(AC 3.3.1 · 3.3.3)
 - **재발급(I-10 `재발급 후 복사`, I-12)**: 기존 링크에 `revoked_at`을 찍고 새 링크를 만든다(AC 4.3.1). 예약 · 수강권 기록은 그대로다(AC 4.3.2)
@@ -528,41 +528,80 @@ PRD 단위가 배포 단위는 아니다. 1차 배포에는 PRD 1~3이 함께 �
 
 #### 5. 수강권 (I-10, I-11)
 
-지금은 **횟수권만** 다룬다. 월 정액 등록 화면(I-11/월 정액)과 월 정액 카드(I-10/수강권 카드/월 정액)가 미작성이고, 월 정액 규칙이 [DEC-0011](https://github.com/Fit-link-v2/Fit-link-PRD/pull/5)(머지 전)로 바뀌는 중이라 모양을 정하지 않았다(와이어프레임 대조 A-4 · A-7).
+**카드**는 횟수권과 월 정액을 모두 다룬다. 카드 구성은 DEC-0010 (proposed, BE 답 2026-10-12)이 정했고, 회원 상세의 카드는 회원 화면의 카드와 같은 줄을 쓴다(PRD-0001 AC 3.2.20, PRD-0002 AC 2.1.5 ~ 2.1.7). **등록**은 아직 횟수권만 다룬다. 월 정액 등록 화면(I-11/월 정액)이 미작성이라서다(와이어프레임 대조 A-4).
 
 | 메서드 | 경로 | 요청 | 응답 | 에러 |
 |---|---|---|---|---|
-| POST | `/instructor/members/{id}/entitlements` | `{ "kind": "PASS", "windowStart": "2026-09-09", "windowEnd": "2026-11-08", "maxCount": 10 }` | 201 `Entitlement` | 400, 404, 422 ENTITLEMENT_PERIOD_OVERLAP, 422 ENTITLEMENT_OTHER_KIND_ACTIVE |
-| POST | `/instructor/entitlements/{id}/adjust` | `{ "delta": 1 }` | 200 `Entitlement` | 400, 404, 422 REMAINING_OUT_OF_RANGE |
+| POST | `/instructor/members/{id}/entitlements` | `{ "kind": "PASS", "startsOn": "2026-09-09", "endsOn": "2026-11-08", "maxCount": 10 }` | 201 `EntitlementCard` | 400, 404, 422 ENTITLEMENT_PERIOD_OVERLAP, 422 ENTITLEMENT_OTHER_KIND_ACTIVE |
+| POST | `/instructor/entitlements/{id}/adjust` | `{ "delta": 1 }` | 200 `EntitlementCard` | 400, 404, 422 REMAINING_OUT_OF_RANGE, 422 PERIOD_NOT_CURRENT |
 
 ```jsonc
-// Entitlement — I-10 수강권 카드 "10회권 · 9/1 ~ 10/31 · 잔여 3회"
+// EntitlementCard (횟수권) — "10회권 · 9/1~10/31" / "3회 남음"
 {
-  "id": 12, "kind": "PASS",
-  "windowStart": "2026-09-01", "windowEnd": "2026-10-31",
+  "kind": "PASS", "id": 12,
+  "startsOn": "2026-09-01", "endsOn": "2026-10-31",
   "maxCount": 10, "remaining": 3,
-  "expired": false                    // windowEnd < 오늘(Asia/Seoul)
+  "state": "ACTIVE"                   // NOT_STARTED | ACTIVE | EXPIRED
+}
+
+// EntitlementCard (월 정액) — 등록 하나가 카드 하나
+// "주당 2회 · 10/8~11/4" / "2회 중 1회 남음" / "10/8~10/14 예약 한도"
+{
+  "kind": "SUBSCRIPTION", "id": 5,    // subscription.id
+  "limit": { "per": "WEEK", "count": 2 },   // per: WEEK(주당 N회) | FOUR_WEEKS(4주마다 N회)
+  "startsOn": "2026-10-08", "endsOn": "2026-11-04",   // 등록 전체
+  "state": "ACTIVE",
+  "currentPeriod": {                  // 오늘을 덮는 주기. NOT_STARTED · EXPIRED면 null. ACTIVE인데 null인 경우는 아래
+    "entitlementId": 31,              // 잔여 수정 대상
+    "startsOn": "2026-10-08", "endsOn": "2026-10-14",
+    "maxCount": 2, "remaining": 1
+  }
 }
 ```
 
-- **목록 순서(I-10)**: 만료 안 된 것 먼저, 그다음 만료된 것. 와이어프레임이 이 순서다. 같은 묶음 안의 순서는 종료일 순 (제안). `expired: true`면 흐림 처리한다(AC 3.2.4)
-- **등록 입력**: `windowStart <= windowEnd`(`entitlement_window_order`), `maxCount` 1 이상(`max_count > 0`). 횟수 상한과 지난 날짜 등록 허용 여부는 와이어프레임 대조 B-8, ENDED 회원에게 등록할 수 있는지는 B-5
+- **화면 문구와의 대응**: 윗줄은 `startsOn` ~ `endsOn`(월 정액은 `limit`도), 큰 글씨는 횟수권 `remaining` · 월 정액 `currentPeriod`, 셋째 줄은 `currentPeriod`의 날짜 범위다. 주기가 등록 기간과 같으면 FE가 셋째 줄을 쓰지 않는다(PRD-0002 AC 2.1.6). 시작 전 카드의 "10/8 (목)에 2회로 시작"은 월 정액이면 `startsOn` · `limit.count`, 횟수권이면 `startsOn` · `maxCount`로 만든다(PRD-0002 AC 2.1.7). 화면 문구는 "N회 남음"이고 필드 이름은 `remaining`이다
+- **`state`**: `startsOn`이 오늘 이후면 NOT_STARTED, `endsOn`이 오늘 이전이면 EXPIRED, 그 밖은 ACTIVE. 월 정액은 등록 전체의 종료일로 판단한다(PRD-0001 AC 3.2.15). 잔여가 0회여도 종료일까지는 ACTIVE다(DEC-0011)
+- **카드 순서**: 맨 앞은 다음에 차감될 수강권이다(PRD-0002 AC 2.1.8, PRD-0003 AC 1.3.5). 아래 순서로 정렬한다 (제안. 첫 줄만 AC 근거)
+  1. ACTIVE이면서 잔여 1 이상. 끝 날짜(횟수권 `endsOn`, 월 정액 `currentPeriod.endsOn`)가 이른 순
+  2. ACTIVE이면서 잔여 0
+  3. NOT_STARTED. 시작일이 이른 순
+  4. EXPIRED. 종료일이 늦은 순. 회원 상세에만 있고 흐림 처리한다(AC 3.2.4). 회원 화면에는 내려주지 않는다(PRD-0002 AC 2.1.9)
+- **월 정액의 지금 주기 찾기**: `entitlement.source_id = subscription.id`이면서 오늘을 덮는 행이다. 등록 직후와 매일 배치가 오늘을 덮는 주기를 만든다([수강권 쓰기 경로](../../entitlement/write-paths.md) 2)
+  - 그래도 `state = ACTIVE`인데 `currentPeriod`가 `null`일 수 있다. 4주마다 N회 생성 쿼리가 아직 없는 동안, ENDED 회원의 주기 생성을 멈추기로 하는 경우(BE-0001 Q13), 배치가 그 건만 실패한 경우다. 이때 화면에 무엇을 보일지는 와이어프레임 대조 B-13
+- **`frontCard`(회원 목록)**: 회원 상세 `cards`의 맨 앞이다. 만료된 수강권만 있으면 `null`이다 (제안). 맨 앞이 시작 전 카드일 때 줄에 "아직 시작 전"을 쓸지는 와이어프레임 대조 B-13과 같이 정한다
+- **등록 입력**: `startsOn <= endsOn`(`entitlement_window_order`), `maxCount` 1 이상(`max_count > 0`). 횟수 상한과 지난 날짜 등록 허용 여부는 와이어프레임 대조 B-8, ENDED 회원에게 등록할 수 있는지는 B-5
 - **등록 거부** (AC 3.2.17. 화면이 미리 막더라도 서버가 다시 검사한다)
 
   | HTTP | code | 상황 | 같이 주는 값 | 근거 |
   |---|---|---|---|---|
   | 422 | ENTITLEMENT_PERIOD_OVERLAP | 다른 종류 수강권과 기간이 겹침 | | AC 3.2.10 |
-  | 422 | ENTITLEMENT_OTHER_KIND_ACTIVE | 만료되지 않은 다른 종류 수강권이 있음 | `availableFrom`: 만료되지 않은 다른 종류 중 가장 늦은 종료일의 다음 날 | AC 3.2.15 · DEC-0011 (머지 전) |
+  | 422 | ENTITLEMENT_OTHER_KIND_ACTIVE | 만료되지 않은 다른 종류 수강권이 있음 | `availableFrom`: 만료되지 않은 다른 종류 중 가장 늦은 종료일의 다음 날 | AC 3.2.15 · DEC-0011 |
 
   - 두 조건에 같이 걸리면 ENTITLEMENT_OTHER_KIND_ACTIVE를 준다 (제안). 강사가 언제부터 등록할 수 있는지 알 수 있기 때문이다
   - 횟수권끼리는 겹쳐도 된다(AC 3.2.11)
   - 이 API는 아직 횟수권만 받으므로 다른 종류는 월 정액뿐이다. 월 정액 등록 API가 생기기 전에는 두 코드 모두 나지 않는다
-  - ENTITLEMENT_OTHER_KIND_ACTIVE 검사는 [수강권 쓰기 경로](../../entitlement/write-paths.md) 1.1에 아직 없다. DEC-0011이 머지된 뒤 BE 문서를 고칠 때 넣는다
-- **잔여 수정(I-10 `-` `+`)**: 바꿀 양(`delta`)을 보낸다. 0이 아닌 정수다. 이 방식은 설계 선택이다. PRD-0003 AC 5.2.1 · 5.2.2는 "`used_count` 직접 수정, 이전 값 기록"까지만 정했다
+  - ENTITLEMENT_OTHER_KIND_ACTIVE 검사는 [수강권 쓰기 경로](../../entitlement/write-paths.md) 1.1에 아직 없다. DEC-0011은 2026-10-12에 머지됐다. `subscription` 스키마 · 쓰기 경로 반영은 별도 작업으로 한다
+- **잔여 수정(I-10 `-` `+`, PRD-0001 AC 3.2.19 · PRD-0003 AC 5.2.3)**: 경로의 `{id}`는 수강권 행이다. 횟수권은 카드의 `id`, 월 정액은 `currentPeriod.entitlementId`다. 바꿀 양(`delta`)을 보낸다. 0이 아닌 정수다. 이 방식은 설계 선택이다. PRD-0003 AC 5.2.3 · 5.2.2는 "`used_count` 직접 수정, 이전 값 기록"까지만 정했다
   - 바꾼 뒤의 값(`remaining: 4`)을 보내지 않는 이유: 화면이 잔여 3을 보는 동안 회원이 예약해 2가 됐는데 강사가 `+`를 눌러 4를 보내면 그 예약의 차감이 사라진다. `delta`면 2에서 3이 된다
-  - 쓰기는 상대값 조건부 UPDATE 한 문장이다. `SET used_count = used_count - $delta WHERE id = $id AND used_count - $delta BETWEEN 0 AND max_count` (소유자 조건 포함). 0행이면 소유자 조건으로 한 번 더 읽어, 없거나 남의 수강권이면 404, 있으면 결과가 0 미만이거나 `maxCount`를 넘는 경우라 422 REMAINING_OUT_OF_RANGE다(PRD-0003 AC 5.2.1, `entitlement_used_range`). 만료된 수강권을 고칠 수 있는지는 와이어프레임 대조 B-4
+  - 쓰기는 상대값 조건부 UPDATE 한 문장이다. 소유자 조건과 함께 아래 조건을 건다
+    ```sql
+    SET used_count = used_count - $delta
+    WHERE id = $id
+      AND used_count - $delta BETWEEN 0 AND max_count                        -- entitlement_used_range
+      AND (kind = 'PASS' OR (window_start <= $today AND $today <= window_end)) -- 월 정액은 진행 중인 주기만
+    ```
+  - 0행이면 소유자 조건으로 한 번 더 읽어 아래 순서로 처음 걸리는 것을 답한다. 2와 3이 같이 해당하면 2를 먼저 준다 (제안)
+
+    | 순서 | 조건 | 응답 |
+    |---|---|---|
+    | 1 | 없거나 남의 수강권 | 404 NOT_FOUND |
+    | 2 | 월 정액인데 그 주기가 오늘을 덮지 않음 | 422 PERIOD_NOT_CURRENT |
+    | 3 | 결과가 0 미만이거나 `maxCount` 초과 | 422 REMAINING_OUT_OF_RANGE (PRD-0003 AC 5.2.3) |
+
+  - 만료되거나 시작 전인 **횟수권**을 고칠 수 있는지는 와이어프레임 대조 B-4
   - 대신 같은 요청을 두 번 보내면 두 번 반영된다. FE는 자동 재시도를 하지 않는다(공통 규칙)
   - `-` · `+`를 빠르게 여러 번 누를 때 요청을 묶을지는 FE가 정한다. 서버는 요청마다 따로 반영한다
+  - **월 정액은 진행 중인 주기(오늘을 덮는 주기)의 수강권만 고친다**(PRD-0001 AC 3.2.19, PRD-0003 AC 5.2.3). 위 UPDATE의 마지막 조건이다. 시작 전 · 만료된 월 정액 카드에는 스테퍼가 없다(AC 3.2.20)
   - 수정 이력(`entitlement_adjustment`)은 PRD 3에서 붙는다
   - 잔여를 늘려 `used_count`가 0이 된 뒤 그 수강권으로 잡힌 예약이 취소 · 휴강되면 복구가 범위를 넘어 실패할 수 있다. PRD 3의 열린 질문 Q15([예약 쓰기 경로](../../booking/write-paths.md) 5.2)와 같이 정한다
 - 수강권 삭제 · 기간 수정 · 중도 종료 API는 없다(AC 3.2.18, DEC-0011)
@@ -582,6 +621,7 @@ PRD 단위가 배포 단위는 아니다. 1차 배포에는 PRD 1~3이 함께 �
 | 422 | ENTITLEMENT_PERIOD_OVERLAP | 수강권 등록 | |
 | 422 | ENTITLEMENT_OTHER_KIND_ACTIVE | 수강권 등록 | `availableFrom: "2026-11-01"` |
 | 422 | REMAINING_OUT_OF_RANGE | 잔여 수정 | |
+| 422 | PERIOD_NOT_CURRENT | 월 정액 잔여 수정. 진행 중인 주기가 아님 | |
 
 ## AC 대 제약
 
@@ -623,6 +663,8 @@ PRD 단위가 배포 단위는 아니다. 1차 배포에는 PRD 1~3이 함께 �
 
 ### A. AC는 있는데 화면이 없거나 미작성
 
+취소선 행은 BE가 답했지만 FE 승인 전이라 남겨 둔 것이다. 승인되면 지운다.
+
 | # | AC | 내용 | 와이어프레임 | API 영향 |
 |---|---|---|---|---|
 | A-1 | 1.1.7 | 로그아웃 | I-13/로그아웃 미작성 | 없음. `POST /auth/logout`은 위에 있다 |
@@ -631,7 +673,7 @@ PRD 단위가 배포 단위는 아니다. 1차 배포에는 PRD 1~3이 함께 �
 | A-4 | 3.2.12 ~ 3.2.14 | 월 정액 입력 | I-11/월 정액 미작성. 노트가 옛 기준(주기 단위 주 또는 월)이다. DEC-0011 기준은 횟수 제한 방식(주당 N회 또는 4주마다 N회) · 횟수 · 시작일 · 등록 기간(4주 단위) | **있음.** 월 정액 등록 요청 모양을 못 정했다 |
 | A-5 | 3.2.10 | 다른 종류와 기간 겹침 사유 | I-11/기간 겹침 미작성 | 없음. 422 ENTITLEMENT_PERIOD_OVERLAP |
 | A-6 | 3.2.15 · 3.2.16 | 만료 전 다른 종류 등록 불가, 등록 전 안내 | 없음(DEC-0011에서 새로 생김) | **있음.** 화면이 미리 막으려면 무엇을 내려줄지 정해야 한다. 제안: `MemberDetail`에 `registrableKinds: [{ "kind": "SUBSCRIPTION", "availableFrom": "2026-11-01" }]` |
-| A-7 | 3.2.3 + DEC-0010 (proposed) 7번 | 월 정액 카드, 진행 중인 주기만 잔여 수정 | I-10/수강권 카드/월 정액 미작성 | **있음.** `Entitlement`의 월 정액 모양(등록 정보, 지금 주기)을 못 정했다 |
+| ~~A-7~~ | 3.2.19 · 3.2.20 | ~~월 정액 카드, 진행 중인 주기만 잔여 수정~~ | | **해소.** 카드 구성이 DEC-0010 (proposed, BE 답 2026-10-12)에서 정해져 5절 `EntitlementCard`로 반영 |
 | A-8 | 3.2.17 | 서버가 등록을 거부했을 때 시트 안 표시 | 없음 | 없음. 위 422 두 가지 |
 | A-9 | D-1 · 2.1.5 | 시작한 슬롯을 시각 변경 · 휴강하려 할 때(422 CLASS_STARTED), 겹치는 요일 · 시각으로 규칙을 등록하거나 다시 켤 때(409 RECURRENCE_DUPLICATE)의 사유 표시 | I-03 · I-05 · I-06에 없음 | 없음. 미리 막으려면 `startsAt <= 지금`으로 판단한다 |
 
@@ -639,10 +681,10 @@ PRD 단위가 배포 단위는 아니다. 1차 배포에는 PRD 1~3이 함께 �
 
 | # | 질문 | 왜 API가 기다리나 |
 |---|---|---|
-| B-1 | 회원 목록(I-07) 줄에 월 정액 회원은 무엇을 보이나. 지금은 횟수권 "잔여 N회"만 그려져 있다. 시작 전 횟수권도 합계에 넣나 | `MemberSummary`의 수강권 필드 |
+| ~~B-1~~ | ~~회원 목록(I-07) 줄에 월 정액 회원은 무엇을 보이나~~ | **해소.** 지금 주기의 남은 횟수(A안). DEC-0010 (proposed, BE 답 2026-10-12) 5번. FE 승인 전 |
 | B-2 | 휴강한 슬롯을 다가오는 수업(I-02)에서 숨기나, "휴강" 표시로 남기나 | 목록에 넣을지. 지금 초안은 넣고 `canceledAt`을 준다 |
 | B-3 | 오픈 범위를 줄인 뒤 범위 밖에 남은 슬롯(AC 2.4.2)을 강사에게 보이나 | `/instructor/slots`의 조회 끝 날짜 |
-| B-4 | 만료된 수강권(I-10/수강권 카드/만료)도 잔여를 고칠 수 있나. 그림에는 `-` `+`가 없다 | 서버가 거부할지(422) |
+| B-4 | 만료되거나 시작 전인 **횟수권**(I-10/수강권 카드/만료)도 잔여를 고칠 수 있나. 그림에는 `-` `+`가 없다. 월 정액은 진행 중인 주기만으로 정해졌다(PRD-0001 AC 3.2.20) | 서버가 거부할지(422) |
 | B-5 | 수강 종료(ENDED) 회원에게 수강권을 등록할 수 있나. I-10/수강 종료됨에도 `+ 추가`가 있다 | 서버가 거부할지 |
 | B-6 | 끈 규칙을 다시 켜거나, 끈 규칙과 같은 요일 · 시각으로 새 규칙을 만들면 (Q18). 지금 제약으로는 같은 시각 슬롯이 둘 생길 수 있다. 다시 켤 때 빈 구간의 슬롯을 바로 채우나 | 새 규칙 등록을 409로 막을지, 겹치는 슬롯 생성을 건너뛸지, 다시 켤 때 빈 구간을 바로 채울지 |
 | B-7 | 로그인 성공 · 실패 뒤 이동할 `app.` 경로와 실패를 알리는 방법 (DEC-0008 3번) | 콜백의 302 목적지 |
@@ -651,6 +693,7 @@ PRD 단위가 배포 단위는 아니다. 1차 배포에는 PRD 1~3이 함께 �
 | B-10 | ENDED 회원의 링크가 미개봉이면 "미개봉"을 보이나. AC 5.1.5는 ENDED를 빼지 않았는데 I-07의 ENDED 줄에는 표시가 없다 | 없음. FE가 `status`로 판단할 수 있다. 화면 규칙만 정하면 된다 |
 | B-11 | ENDED 회원의 링크를 재발급할 수 있나. I-10/수강 종료됨에도 `재발급 후 복사`가 있다 | 서버가 거부할지 |
 | B-12 | 회원 상세(I-10)에서 이름 · 메모를 고칠 수 있나. 그림에는 수정 수단이 없다 | `PATCH /instructor/members/{id}`가 `name` · `memo`를 받을지 |
+| B-13 | 카드의 큰 글씨가 비는 경우: 만료된 월 정액 카드, `ACTIVE`인데 지금 주기가 없는 월 정액 카드, 회원 목록 줄의 맨 앞이 시작 전 카드일 때 | `currentPeriod`가 `null`일 때 FE가 무엇을 쓸지. 응답 모양은 바뀌지 않는다 |
 
 ### C. PRD와 와이어프레임이 다른 것
 
@@ -671,6 +714,7 @@ PRD 단위가 배포 단위는 아니다. 1차 배포에는 PRD 1~3이 함께 �
 |---|---|---|
 | D-1 | 이미 시작한 슬롯은 시각 변경과 휴강을 거부한다(422 CLASS_STARTED). 지난 시각으로 옮기는 것도 거부한다(400) | PRD-0001 AC 2.3 · PRD-0003 AC 7에 AC 추가. [예약 쓰기 경로](../../booking/write-paths.md)의 조건부 UPDATE에는 반영했다 |
 | D-2 | C-1 · C-2는 와이어프레임을 따른다 | PRD-0001 `prd.md` 줄 상태 표 · User Flow 5번, AC 4.2.3 · 4.3.1 |
+| D-3 | DEC-0010 "BE와 정할 것" 5건에 BE가 답함(2026-10-12, [PR #4 코멘트](https://github.com/Fit-link-v2/Fit-link-PRD/pull/4#issuecomment-6125514522)). 1 카드로 쌓기 수용, 2 대기 조건 수용, 3 이번 주기 소진 화면 B안, 4 카드 구성 · "남음" 수용, 5 회원 목록 월 정액 줄 A안 | FE 승인 뒤 PR #4에서 DEC-0010 · PRD 반영. BE 문서는 미리 반영(BE-0001 4 · 5절 · BE-0002 · BE-0003 · BE-0004) |
 
 ## 열린 질문
 
