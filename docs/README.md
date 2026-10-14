@@ -30,6 +30,19 @@ docs/
 - 후속 작업은 앞 폴더를 고치지 않고 새 번호 폴더를 만든다. `feature.yaml`의 `extends`에 앞 기능 번호를 적는다
 - `openapi.json`은 문서가 아니라 빌드 결과물이라 `docs/` 밖에 둔다. 위치는 Spring 프로젝트 구성 때 정한다
 
+### 어디에 쓰나
+
+내용을 더할 때마다 이 표에서 자리를 확인한다.
+
+| 내용 | 자리 |
+|---|---|
+| 무엇을 만드나 (요구사항, 화면 동작) | [Fit-link-PRD](https://github.com/Fit-link-v2/Fit-link-PRD) |
+| FE와 같이 따르는 결정과 그 이유 | Fit-link-PRD `decisions/` (DEC) |
+| BE만의 설계 결정과 그 이유 | `decisions/` (BE-ADR) |
+| 기능의 데이터 모델 · API · 트랜잭션 | 기능 `prd.md`. 템플릿의 절만 쓴다(지금 문서는 prd 단계에서 템플릿으로 다시 쓴다). 이유는 한 줄까지 |
+| 아직 정하지 않은 것, PRD에 AC가 없는 규칙 | 기능 `prd.md`의 `열린 질문` 표. 한 줄씩 |
+| FE에게 묻는 상세, 진행 중인 논의, 누가 언제 정했나 | 이슈 · PR. 기능 `prd.md` · 도메인 문서에 남기지 않는다. 결정 문서의 `date` · `deciders` · `source`는 예외 |
+
 ## 흐름
 
 recatch-tdd 흐름을 따른다. 단계마다 만들어지는 문서가 정해져 있다.

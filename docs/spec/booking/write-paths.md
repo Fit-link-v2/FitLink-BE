@@ -56,7 +56,7 @@ PostgreSQL 문서 기준으로, 같은 행을 다른 트랜잭션이 수정 중�
 
 ## 5.2 휴강 트랜잭션
 
-> 변경 이력 (구현 전, 설계상 관련 기능): [0003](0003-booking/prd.md) · [0004](0004-waitlist/prd.md)
+> 변경 이력 (구현 전, 설계상 관련 기능): [0003](0003-booking/prd.md) · [0004](0004-waitlist/prd.md) · [0001](../instructor/0001-instructor-setup/prd.md) (시작한 슬롯 휴강 금지)
 
 PRD 3 US 7([DEC-0006](https://github.com/Fit-link-v2/Fit-link-PRD/blob/main/decisions/0006-booking-rules.md))의 트랜잭션이다. 대기 취소(4번 문장)는 기능 0004가 붙인다.
 
@@ -86,9 +86,11 @@ UPDATE class_slot c SET canceled_at = now()
  WHERE c.id = $class_slot_id
    AND r.id = c.recurrence_id
    AND r.instructor_id = $me          -- 세션의 강사
-   AND c.canceled_at IS NULL;
+   AND c.canceled_at IS NULL
+   AND c.starts_at > now();           -- 시작한 수업은 휴강하지 않는다 (BE-0001 API, 2026-10-05)
 -- 0행이면 롤백. 남의 슬롯 · 없는 슬롯이면 존재하지 않는 것과 같은 응답,
 -- 내 슬롯인데 이미 휴강이면 아무것도 바꾸지 않고 성공으로 끝낸다 (PRD 3 AC 7.2.4)
+-- 휴강 전인데 이미 시작했으면 422 CLASS_STARTED. 이미 휴강했으면 시작 여부와 상관없이 성공이 먼저다 (BE-0001 API 2절)
 
 UPDATE entitlement e SET used_count = e.used_count - 1
   FROM booking b
@@ -124,8 +126,9 @@ COMMIT;
 UPDATE class_slot c SET starts_at = $new_starts_at
   FROM recurrence r
  WHERE c.id = $class_slot_id AND r.id = c.recurrence_id AND r.instructor_id = $me
-   AND c.taken = 0 AND c.canceled_at IS NULL;
--- 0행이면 예약이 있거나 휴강했거나 남의 슬롯
+   AND c.taken = 0 AND c.canceled_at IS NULL
+   AND c.starts_at > now();   -- 시작한 수업은 옮기지 않는다. 지난 시각으로 옮기는 것은 슬롯을 읽은 뒤 검사한다(400)
+-- 0행이면 예약이 있거나 휴강했거나 시작했거나 남의 슬롯. 판정 순서(404 → 휴강 → 시작 → 지난 시각 → 예약)는 BE-0001 API 2절
 ```
 
 ## 5.3 회원 취소

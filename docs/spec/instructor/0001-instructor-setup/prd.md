@@ -1,6 +1,6 @@
 # BE-0001 개발 PRD · 강사 세팅
 
-> Notion "테이블 설계 · ERD" 문서에서 이 기능에 해당하는 부분을 옮긴 뒤, 2026-09-25 회의 결정([DEC-0001~0006](https://github.com/Fit-link-v2/Fit-link-PRD/tree/main/decisions))을 반영했다. 아직 recatch-tdd prd 단계 전이다. [템플릿](../../../templates/prd.md) 형식(인수 조건 · API 절)으로 다시 쓰는 것은 이 기능의 prd 단계에서 한다.
+> 아직 recatch-tdd prd 단계 전이다. [템플릿](../../../templates/prd.md) 형식으로 다시 쓰는 것은 이 기능의 prd 단계에서 한다.
 
 ## 근거
 
@@ -356,6 +356,150 @@ PRD 단위가 배포 단위는 아니다. 1차 배포에는 PRD 1~3이 함께 �
 |---|---|---|
 | 001 | btree_gist 확장, instructor, instructor_session, setting(open_range_days), recurrence, class_slot, member, member_link, subscription, entitlement | PRD 1 |
 
+### API
+
+와이어프레임 I-01 ~ I-13 중 그려진 화면만 다룬다. 관련 열린 질문은 Q18 · Q19 · Q21 ~ Q34.
+
+#### 공통 규칙
+
+| 항목 | 규칙 |
+|---|---|
+| 호스트 · 인증 · CSRF | `https://api.{도메인}`. 세션 쿠키 `__Host-Http-SESSION`(`credentials: 'include'`). GET이 아닌 요청은 `X-CSRF: 1` (DEC-0008) |
+| 형식 | JSON. 목록은 `{ "items": [...] }`. 날짜 `YYYY-MM-DD`, 시각 `HH:mm`, 순간은 `+09:00` ISO 8601, 날짜 경계는 `Asia/Seoul`(BE-ADR-0006). 요일 `MON` ~ `SUN` |
+| 에러 본문 | `{ "code": "...", "message": "..." }`. 코드마다 더하는 필드는 에러 코드 목록 참고 |
+| 상태 코드 | 409는 같은 것이 이미 있음, 422는 지금 상태가 전제 조건을 채우지 못함(PRD-0003 AC 3.1과 같은 구분. SEAT_TAKEN 409는 경합이라 예외) |
+| 판정 순서 | 401 → 403 → 400 → 404 → 409 · 422. 남의 id와 없는 id는 같은 404(PRD-0001 AC 1.3.2). 슬롯 시각 변경은 2절 순서 |
+| DB 제약 위반 | 500이 아니라 해당 코드로 바꾼다. 유니크(23505) → RECURRENCE_DUPLICATE, EXCLUDE(23P01) → ENTITLEMENT_PERIOD_OVERLAP |
+| 재시도 · 중복 클릭 | GET이 아닌 요청은 자동 재시도하지 않고, 응답이 올 때까지 버튼을 막는다. 타임아웃이면 GET으로 확인한다(PRD-0003 AC 3.2) |
+
+#### 1. 로그인 · 로그아웃 (I-01, I-13)
+
+| 메서드 | 경로 | 요청 | 응답 | 에러 |
+|---|---|---|---|---|
+| GET | `/auth/kakao` | 페이지 이동으로 연다 | 302 → 카카오. `__Host-Http-KAKAO-STATE` 쿠키 | |
+| GET | `/auth/kakao/callback` | `code` · `state` 또는 `error` · `state` | 성공: 세션 쿠키 + 302 → 강사 화면. 실패: 302 → 로그인 화면 | |
+| GET | `/me` | | 200 `{ "id": 1, "name": "김강사", "email": null }` | 401 |
+| POST | `/auth/logout` | | 204 + 쿠키 삭제. 세션이 없어도 204 | |
+
+- 콜백 실패(카카오 `error=access_denied`, `state` 불일치, 토큰 교환 실패)는 `I-01/인증 실패`로 보낸다(AC 1.1.5). `state` 쿠키는 비교 후 지운다
+- 302 목적지는 설정 고정값이고 요청 파라미터로 받지 않는다(Q30). 로그인마다 새 세션 ID를 만들고 기존 세션은 무효로 한다(DEC-0008). 카카오 `code` · 토큰은 로그에 남기지 않는다
+- 앱을 열 때 `/me`로 로그인 여부를 판단한다. 인증 API 모양은 DEC-0008(proposed) 합의할 것 6번에서 확정한다
+- 첫 로그인에서 강사와 설정 1행을 만든다(AC 1.2.1 ~ 1.2.3). `name` · `email`은 `null`일 수 있다(AC 1.2.4)
+
+#### 2. 시간표 (I-02 ~ I-06)
+
+| 메서드 | 경로 | 요청 | 응답 | 에러 |
+|---|---|---|---|---|
+| GET | `/instructor/recurrences` | | 200 `{ "items": [Recurrence] }` | |
+| POST | `/instructor/recurrences` | `{ "weekdays": ["MON","WED"], "startTime": "20:00", "capacity": 8 }` | 201 `{ "items": [Recurrence] }` | 400, 409 RECURRENCE_DUPLICATE |
+| PATCH | `/instructor/recurrences/{id}` | `{ "active": false }` | 200 `Recurrence` | 400, 404, 409 RECURRENCE_DUPLICATE |
+| GET | `/instructor/slots` | | 200 `{ "openRangeDays": 14, "items": [SlotSummary] }` | |
+| GET | `/instructor/slots/{id}` | | 200 `SlotDetail` | 404 |
+| PATCH | `/instructor/slots/{id}` | `{ "startTime": "19:30" }` | 200 `SlotDetail` | 400, 404, 422 SLOT_CANCELED · CLASS_STARTED · SLOT_HAS_BOOKINGS |
+| POST | `/instructor/slots/{id}/cancel` | | 200 `SlotDetail` | 404, 422 CLASS_STARTED |
+
+```jsonc
+// Recurrence
+{ "id": 4, "weekday": "WED", "startTime": "19:00", "capacity": 8, "active": true }
+// SlotSummary
+{ "id": 101, "startsAt": "2026-09-09T19:00:00+09:00", "capacity": 8, "taken": 3, "canceledAt": null }
+// SlotDetail
+{ "id": 101, "startsAt": "2026-09-09T19:00:00+09:00", "capacity": 8, "taken": 3, "canceledAt": null,
+  "recurrence": { "id": 4, "weekday": "WED", "startTime": "19:00" } }
+```
+
+- 규칙 목록: 월 ~ 일, 같은 요일은 시각 순
+- 규칙 등록: `capacity` 1 ~ 50, `weekdays` 1개 이상 · 중복 없음, `startTime` `HH:mm`(AC 2.1.5). 요일마다 규칙 1개, 한 트랜잭션. 겹치는 요일이 있으면 전부 거부하고 `weekdays`에 겹친 요일을 준다(DB 유니크 위반으로 걸리면 일부만 담길 수 있다). 저장하면서 오픈 범위 안의 슬롯을 만들고(AC 2.1.2), 오늘 이미 지난 회차는 만들지 않는다
+- 규칙 끄기는 이후 생성만 멈춘다(AC 2.1.4). 다시 켤 때 같은 요일 · 시각의 켜진 규칙이 있으면 409. 끈 규칙과 같은 시각의 새 규칙은 Q18
+- 슬롯 목록: 시작 시각이 지금 이후인 것부터 오픈 범위 끝까지(Q25 · Q26)
+- 시각 변경: 날짜는 그대로, 그 슬롯만(AC 2.3.2 · 2.3.3). 시작한 슬롯은 시각 변경 · 휴강을 거부한다(Q21). 슬롯을 먼저 읽고 404 → SLOT_CANCELED → CLASS_STARTED → 400(새 시각이 지금 이전, `fields: [{ "name": "startTime" }]`) → SLOT_HAS_BOOKINGS 순서로 판정한다. 쓰기는 조건부 UPDATE([예약 쓰기 경로](../../booking/write-paths.md))이고, 읽은 뒤 끼어들어 0행이 되면 다시 읽어 같은 순서로 답한다
+- 휴강: 404 → 이미 휴강이면 200(변경 없음, PRD-0003 AC 7.2.4) → CLASS_STARTED. 예약 취소 · 복구와 회원 이름(PRD-0003 AC 7.1.3 · 7.3.4)은 PRD 3에서 붙는다
+- 예약자 명단 · 대기 수는 PRD 3 · 4에서 필드를 더한다
+
+#### 3. 설정 (I-13)
+
+| 메서드 | 경로 | 요청 | 응답 | 에러 |
+|---|---|---|---|---|
+| GET | `/instructor/settings` | | 200 `{ "openRangeDays": 14 }` | |
+| PATCH | `/instructor/settings` | `{ "openRangeDays": 21 }` | 200 `{ "openRangeDays": 21 }` | 400 |
+
+- 7 ~ 28(AC 2.4.1). 늘리면 같은 요청에서 늘어난 구간의 슬롯을 채운다(AC 2.4.2, Q19). `cancelDeadlineHours`는 PRD 5
+
+#### 4. 회원 · 링크 (I-07 ~ I-10, I-12)
+
+| 메서드 | 경로 | 요청 | 응답 | 에러 |
+|---|---|---|---|---|
+| GET | `/instructor/members` | | 200 `{ "unopenedCount": 2, "items": [MemberSummary] }` | |
+| POST | `/instructor/members` | `{ "name": "김OO", "memo": "목요반" }` | 201 `{ "member": MemberDetail, "linkUrl": "https://app.{도메인}/m/{token}" }` | 400 |
+| GET | `/instructor/members/{id}` | | 200 `MemberDetail` | 404 |
+| PATCH | `/instructor/members/{id}` | `{ "status": "ENDED" }` | 200 `MemberDetail` | 400, 404 |
+| POST | `/instructor/members/{id}/link` | | 201 `{ "linkUrl": "..." }` | 404 |
+
+```jsonc
+// MemberSummary
+{ "id": 7, "name": "김OO", "memo": "목요반", "status": "ACTIVE", "linkOpened": true,
+  "frontCard": EntitlementCard }      // 수강권이 없거나 만료만 있으면 null
+// MemberDetail
+{ "id": 7, "name": "김OO", "memo": "목요반", "status": "ACTIVE", "linkOpened": true,
+  "cards": [EntitlementCard] }
+```
+
+- 회원 추가: `name` 필수(앞뒤 공백 제거 후 1자 이상), `memo` 선택(AC 3.1.1, Q31), 동명이인 허용(AC 3.1.2). 저장하면서 링크를 발급한다(AC 3.1.3)
+- `linkUrl`은 발급 응답에만 있다(AC 4.1.2). 응답에 `Cache-Control: no-store`, 본문은 로그에 남기지 않는다(AC 4.4.1). 문구 조립과 복사는 FE(AC 4.2.2)
+- 회원 목록: `unopenedCount`는 링크를 열지 않은 ACTIVE 회원 수(AC 5.1.1). `linkOpened`는 살아 있는 링크의 `first_opened_at` 유무(AC 5.1.3 · 5.1.5). 줄의 남은 횟수는 `frontCard`의 큰 글씨다(DEC-0010). 정렬은 미개봉 → ACTIVE → ENDED, 묶음 안은 이름순(Q22)
+- 수강 종료 · 다시 활성화는 `status`만 바꾼다(AC 3.3.1 · 3.3.3, Q29)
+- 재발급: 기존 링크 무효 + 새 링크(AC 4.3.1 · 4.3.2). 회원 행을 먼저 잠근다(`FOR NO KEY UPDATE`). 확인 창 여부는 FE가 `linkOpened`로 판단한다. 두 번 갔으면 마지막 응답의 `linkUrl`만 쓴다. ENDED 회원은 Q28
+
+#### 5. 수강권 (I-10, I-11)
+
+카드는 횟수권 · 월 정액을 모두 다루고 회원 화면 카드와 같은 모양이다(DEC-0010, PRD-0001 AC 3.2.20). 등록은 횟수권만 다룬다(Q23).
+
+| 메서드 | 경로 | 요청 | 응답 | 에러 |
+|---|---|---|---|---|
+| POST | `/instructor/members/{id}/entitlements` | `{ "kind": "PASS", "startsOn": "2026-09-09", "endsOn": "2026-11-08", "maxCount": 10 }` | 201 `EntitlementCard` | 400, 404, 422 ENTITLEMENT_PERIOD_OVERLAP · ENTITLEMENT_OTHER_KIND_ACTIVE |
+| POST | `/instructor/entitlements/{id}/adjust` | `{ "delta": 1 }` | 200 `EntitlementCard` | 400, 404, 422 PERIOD_NOT_CURRENT · REMAINING_OUT_OF_RANGE |
+
+```jsonc
+// EntitlementCard (횟수권)
+{ "kind": "PASS", "id": 12, "startsOn": "2026-09-01", "endsOn": "2026-10-31",
+  "maxCount": 10, "remaining": 3, "state": "ACTIVE" }      // NOT_STARTED | ACTIVE | EXPIRED
+// EntitlementCard (월 정액). 등록 하나가 카드 하나
+{ "kind": "SUBSCRIPTION", "id": 5,                          // subscription.id
+  "limit": { "per": "WEEK", "count": 2 },                   // per: WEEK | FOUR_WEEKS
+  "startsOn": "2026-10-08", "endsOn": "2026-11-04", "state": "ACTIVE",
+  "currentPeriod": { "entitlementId": 31, "startsOn": "2026-10-08", "endsOn": "2026-10-14",
+                     "maxCount": 2, "remaining": 1 } }      // 오늘을 덮는 주기. 없으면 null
+```
+
+- `state`: 시작일이 오늘 이후면 NOT_STARTED, 종료일이 지났으면 EXPIRED. 월 정액은 등록 전체로 판단하고 잔여 0은 만료가 아니다(PRD-0001 AC 3.2.15)
+- 카드 순서: ACTIVE이고 잔여 1 이상(끝 날짜 이른 순. 횟수권 `endsOn`, 월 정액 `currentPeriod.endsOn`, PRD-0003 AC 1.3.5) → ACTIVE 잔여 0 → NOT_STARTED(시작일 이른 순) → EXPIRED(종료일 늦은 순). 맨 앞이 다음에 차감될 수강권이다(PRD-0002 AC 2.1.8). EXPIRED는 회원 상세에만 준다(AC 3.2.4, PRD-0002 AC 2.1.9)
+- 월 정액 `currentPeriod`는 `source_id`가 그 등록이고 오늘을 덮는 `entitlement` 행이다
+- 등록 입력: `startsOn <= endsOn`, `maxCount` 1 이상. 다른 종류와 기간이 겹치면 ENTITLEMENT_PERIOD_OVERLAP(AC 3.2.10), 만료되지 않은 다른 종류가 있으면 ENTITLEMENT_OTHER_KIND_ACTIVE와 `availableFrom`(그 수강권들 중 가장 늦은 종료일의 다음 날, AC 3.2.15). 둘 다면 뒤의 것. 서버가 다시 검사한다(AC 3.2.17)
+- 잔여 수정: `{id}`는 횟수권은 카드 `id`, 월 정액은 `currentPeriod.entitlementId`. 바꿀 양(0이 아닌 정수)을 보낸다. 사이에 끼어든 예약 차감을 덮어쓰지 않기 위해서다. 횟수권 만료 · 시작 전은 Q27, 복구와의 충돌은 BE-0003 Q15
+  ```sql
+  UPDATE entitlement SET used_count = used_count - $delta
+   WHERE id = $id                                                    -- + 소유자 조건
+     AND used_count - $delta BETWEEN 0 AND max_count
+     AND (kind = 'PASS' OR (window_start <= $today AND $today <= window_end));
+  ```
+  0행이면 다시 읽어 404 → PERIOD_NOT_CURRENT(PRD-0001 AC 3.2.19) → REMAINING_OUT_OF_RANGE(PRD-0003 AC 5.2.3) 순서로 답한다
+- 수강권 삭제 · 기간 수정 · 중도 종료 API는 없다(AC 3.2.18)
+
+#### 에러 코드 목록
+
+| HTTP | code | 나는 곳 | 더하는 필드 |
+|---|---|---|---|
+| 400 | VALIDATION_FAILED | 입력이 있는 요청 | `fields: [{ name, reason }]` |
+| 401 | UNAUTHENTICATED | 강사 API | |
+| 403 | CSRF_HEADER_MISSING | GET이 아닌 요청 | |
+| 404 | NOT_FOUND | 경로에 id가 있는 요청 | |
+| 409 | RECURRENCE_DUPLICATE | 규칙 등록 · 다시 켜기 | `weekdays` |
+| 422 | SLOT_CANCELED · SLOT_HAS_BOOKINGS | 슬롯 시각 변경 | |
+| 422 | CLASS_STARTED | 슬롯 시각 변경 · 휴강. PRD-0003 AC 3.1과 같은 코드 | |
+| 422 | ENTITLEMENT_PERIOD_OVERLAP | 수강권 등록 | |
+| 422 | ENTITLEMENT_OTHER_KIND_ACTIVE | 수강권 등록 | `availableFrom` |
+| 422 | PERIOD_NOT_CURRENT · REMAINING_OUT_OF_RANGE | 잔여 수정 | |
+
 ## AC 대 제약
 
 인수 조건이 어느 제약으로 내려왔는지의 대응표다. 리뷰는 이 표를 기준으로 하면 된다.
@@ -411,3 +555,17 @@ PRD 단위가 배포 단위는 아니다. 1차 배포에는 PRD 1~3이 함께 �
 | Q18 | 규칙을 끄고 같은 요일 · 시각으로 새 규칙을 만들면 | 부분 유니크가 `WHERE active`라 허용되고, 끈 규칙의 남은 슬롯과 새 규칙의 슬롯이 같은 시각에 둘 다 생긴다. 끈 규칙을 다시 켜면 유니크 위반이다. 재활성화 흐름을 정해야 한다 |
 | Q19 | 오픈 범위를 늘릴 때 월 정액 주기도 즉시 만들 것인가 | 슬롯은 즉시 채운다(AC 2.4.2). 수강권 주기를 다음 배치까지 기다리면 그 사이 늘어난 날짜의 수업은 보이는데 예약하면 NO_REMAINING이다. 오픈 범위 변경 트랜잭션에서 그 강사의 주기 생성도 같이 돌리는 것을 제안한다 |
 | Q20 | AC 대 제약 표가 아직 모든 AC를 덮지 않는다 | 1.2.1, 1.3.2, 2.1.4, 2.4.2, 3.2.5, 3.2.7, 3.3.3, 5.1.1 등. 템플릿 형식으로 다시 쓰는 prd 단계에서 채운다 |
+| Q21 | 시작한 슬롯의 시각 변경 · 휴강 거부(API 2절)와 지난 시각으로 옮기기 거부(400)는 PRD에 AC가 없다 | 후속. PRD-0001 AC 2.3 · PRD-0003 AC 7에 AC 추가 |
+| Q22 | 회원 목록 정렬(미개봉 → ACTIVE → ENDED)의 근거 AC가 없다 | 와이어프레임 설명만 있다. PRD에 AC로 올릴지 |
+| Q23 | 월 정액 등록 요청 모양 | I-11/월 정액 미작성. DEC-0011의 입력(횟수 제한 방식 · 횟수 · 시작일 · 4주 단위 기간), `subscription` DDL 변경, [수강권 쓰기 경로](../../entitlement/write-paths.md) 1.1의 만료 전 다른 종류 검사를 같이 한다 |
+| Q24 | 만료되지 않은 다른 종류가 있을 때 등록 전 안내(AC 3.2.16)에 쓸 값 | 화면 미정. `MemberDetail`에 종류별 등록 가능일을 줄지 |
+| Q25 | 휴강한 슬롯을 강사 슬롯 목록에 넣나 | `/instructor/slots` 조회 조건 |
+| Q26 | 오픈 범위를 줄인 뒤 범위 밖에 남은 슬롯(AC 2.4.2)을 강사에게 보이나 | `/instructor/slots` 조회 끝 |
+| Q27 | 만료되거나 시작 전인 횟수권의 잔여를 고칠 수 있나 | 잔여 수정이 거부할지 |
+| Q28 | ENDED 회원에게 수강권 등록 · 링크 재발급을 허용하나 | 등록 · 재발급이 거부할지 |
+| Q29 | 회원 상세에서 이름 · 메모를 고치나 | `PATCH /instructor/members/{id}`가 받을 필드 |
+| Q30 | 로그인 성공 · 실패 뒤 이동할 `app.` 경로와 실패를 알리는 방법(예: `?login=failed`) | 콜백 302 목적지. DEC-0008 합의할 것 3번 |
+| Q31 | 입력 상한: 이름 · 메모 길이, 횟수권 `maxCount`, 지난 날짜 횟수권 등록 | 400 조건 |
+| Q32 | 회원 링크 도메인 | `linkUrl`. DEC-0007, DEC-0008 |
+| Q33 | 반복 규칙과 별개인 일회성 수업(I-03 "한 번만")을 1차에 넣나 | 넣으면 `class_slot` 소유자 표현과 API를 추가한다. PRD-0001 AC 2.3.2는 범위 밖 |
+| Q34 | API 절의 규칙 중 PRD에 AC가 없는 것: 규칙 목록 정렬, 오늘 지난 회차 미생성, 슬롯 목록에서 진행 중 수업 제외, 카드 순서 2 ~ 4단계, 두 422가 겹칠 때 OTHER_KIND_ACTIVE 우선, `frontCard` null 조건 | BE가 정한 기본값. FE 확인 후 필요하면 PRD에 AC로 올린다 |

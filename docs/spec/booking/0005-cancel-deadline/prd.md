@@ -1,6 +1,6 @@
 # BE-0005 개발 PRD · 취소 마감 규칙
 
-> Notion "테이블 설계 · ERD" 문서에서 이 기능에 해당하는 부분을 옮긴 뒤, 2026-09-25 회의 결정([DEC-0001~0006](https://github.com/Fit-link-v2/Fit-link-PRD/tree/main/decisions))을 반영했다. 아직 recatch-tdd prd 단계 전이다. [템플릿](../../../templates/prd.md) 형식(인수 조건 · API 절)으로 다시 쓰는 것은 이 기능의 prd 단계에서 한다.
+> 아직 recatch-tdd prd 단계 전이다. [템플릿](../../../templates/prd.md) 형식으로 다시 쓰는 것은 이 기능의 prd 단계에서 한다.
 
 ## 근거
 

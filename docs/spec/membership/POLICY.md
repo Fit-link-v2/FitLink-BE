@@ -10,5 +10,5 @@
 
 | 기능 | 제목 | 이 도메인 | 상태 |
 |---|---|---|---|
-| [0001](../instructor/0001-instructor-setup/prd.md) | 강사 세팅 | 참여 | planned |
+| [0001](../instructor/0001-instructor-setup/prd.md) | 강사 세팅 | 참여 | designing |
 | [0002](../membership/0002-member-view/prd.md) | 회원 조회 | 담당 | planned |

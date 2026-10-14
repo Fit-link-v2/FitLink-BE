@@ -1,6 +1,6 @@
 # BE-0004 개발 PRD · 대기·승계
 
-> Notion "테이블 설계 · ERD" 문서에서 이 기능에 해당하는 부분을 옮긴 뒤, 2026-09-25 회의 결정([DEC-0001~0006](https://github.com/Fit-link-v2/Fit-link-PRD/tree/main/decisions))을 반영했다. 아직 recatch-tdd prd 단계 전이다. [템플릿](../../../templates/prd.md) 형식(인수 조건 · API 절)으로 다시 쓰는 것은 이 기능의 prd 단계에서 한다.
+> 아직 recatch-tdd prd 단계 전이다. [템플릿](../../../templates/prd.md) 형식으로 다시 쓰는 것은 이 기능의 prd 단계에서 한다.
 
 ## 근거
 
@@ -56,6 +56,7 @@ PRD 단위가 배포 단위는 아니다. 1차 배포에는 PRD 1~3이 함께 �
 |---|---|---|
 | 4 · AC 1.1.3 | 대기는 차감하지 않음 | `waitlist`에 entitlement_id 없음 |
 | 4 · AC 1.1.4 | 대기 중복 등록 차단 | 부분 유니크 (member_id, class_slot_id) WHERE WAITING |
+| 4 · AC 1.1.7 · 1.1.8 | 대기도 그 수업 날짜를 덮는 수강권의 잔여가 1 이상일 때만 | 물리 제약 없음. 대기 등록 때 예약과 같은 판정을 하고 같은 코드로 거부([BE-0003](../0003-booking/prd.md) AC 1.1.5 행, Q36). 대기는 차감하지 않으므로 이후 잔여가 0이 되면 승계 예약이 NO_REMAINING으로 실패한다(DEC-0010) |
 | 4 · AC 2.1.2 | 순번은 created_at 오름차순 | 순번 컬럼 없음. 인덱스 (class_slot_id, created_at) |
 | 4 · AC 2.2.2 | 취소 시 뒤 순번 자동 감소 | 계산값이므로 저장 갱신 없음 |
 | 4 · AC 3.2.2 | 승계 기록 | `waitlist.converted_booking_id` |
