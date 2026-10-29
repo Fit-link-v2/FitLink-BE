@@ -52,9 +52,8 @@ SELECT m.id AS member_id, m.instructor_id
 -- 2. 그 강사의 슬롯만
 SELECT c.id, c.starts_at, c.capacity - c.taken AS remaining
   FROM class_slot c
-  JOIN recurrence r ON r.id = c.recurrence_id
-  JOIN setting    s ON s.instructor_id = r.instructor_id
- WHERE r.instructor_id = $그_강사
+  JOIN setting    s ON s.instructor_id = c.instructor_id
+ WHERE c.instructor_id = $그_강사
    AND c.canceled_at IS NULL
    AND c.starts_at >= $today_start                                  -- 오늘 0시 (Asia/Seoul)
    AND c.starts_at <  $today_start + make_interval(days => s.open_range_days);

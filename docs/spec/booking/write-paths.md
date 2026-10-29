@@ -5,7 +5,7 @@
 **모든 경로의 공통 규칙**
 
 - **`class_slot` 행을 가장 먼저 잠근다.** 예약 · 회원 취소 · 휴강 · 시각 변경이 모두 첫 문장에서 그 슬롯 행을 UPDATE한다. 같은 슬롯을 건드리는 트랜잭션이 이 행에서 한 줄로 서므로, 경로마다 잠그는 순서가 달라 생기는 교착을 막는다
-- **소유자 조건을 첫 문장에 넣는다.** 회원 경로는 링크 토큰으로 얻은 회원의 `instructor_id`, 강사 경로는 세션의 `instructor_id`와 슬롯의 `recurrence.instructor_id`가 같아야 한다. `class_slot_id`는 비밀이 아니라 id만 바꿔 남의 슬롯을 건드릴 수 있기 때문이다(PRD 1 AC 1.3)
+- **소유자 조건을 첫 문장에 넣는다.** 회원 경로는 링크 토큰으로 얻은 회원의 `instructor_id`, 강사 경로는 세션의 `instructor_id`와 슬롯의 `class_slot.instructor_id`가 같아야 한다. `class_slot_id`는 비밀이 아니라 id만 바꿔 남의 슬롯을 건드릴 수 있기 때문이다(PRD 1 AC 1.3)
 
 ## 5.1 예약 트랜잭션
 
@@ -37,10 +37,8 @@ flowchart TD
 ```sql
 UPDATE class_slot c
    SET taken = taken + 1
-  FROM recurrence r
  WHERE c.id = $class_slot_id
-   AND r.id = c.recurrence_id
-   AND r.instructor_id = $member_instructor_id   -- 링크 토큰으로 얻은 회원의 강사
+   AND c.instructor_id = $member_instructor_id   -- 링크 토큰으로 얻은 회원의 강사
    AND c.taken < c.capacity
    AND c.starts_at > now()
    AND c.canceled_at IS NULL;
@@ -82,10 +80,8 @@ flowchart TD
 BEGIN;
 
 UPDATE class_slot c SET canceled_at = now()
-  FROM recurrence r
  WHERE c.id = $class_slot_id
-   AND r.id = c.recurrence_id
-   AND r.instructor_id = $me          -- 세션의 강사
+   AND c.instructor_id = $me          -- 세션의 강사
    AND c.canceled_at IS NULL
    AND c.starts_at > now();           -- 시작한 수업은 휴강하지 않는다 (BE-0001 API, 2026-10-05)
 -- 0행이면 롤백. 남의 슬롯 · 없는 슬롯이면 존재하지 않는 것과 같은 응답,
@@ -124,8 +120,7 @@ COMMIT;
 
 ```sql
 UPDATE class_slot c SET starts_at = $new_starts_at
-  FROM recurrence r
- WHERE c.id = $class_slot_id AND r.id = c.recurrence_id AND r.instructor_id = $me
+ WHERE c.id = $class_slot_id AND c.instructor_id = $me
    AND c.taken = 0 AND c.canceled_at IS NULL
    AND c.starts_at > now();   -- 시작한 수업은 옮기지 않는다. 지난 시각으로 옮기는 것은 슬롯을 읽은 뒤 검사한다(400)
 -- 0행이면 예약이 있거나 휴강했거나 시작했거나 남의 슬롯. 판정 순서(404 → 휴강 → 시작 → 지난 시각 → 예약)는 BE-0001 API 2절
