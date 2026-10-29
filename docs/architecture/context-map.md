@@ -41,6 +41,7 @@ flowchart LR
 | 테이블 (도메인) | 컬럼 | 가리키는 테이블 (도메인) |
 |---|---|---|
 | `recurrence` (schedule) | `instructor_id` | `instructor` (instructor) |
+| `class_slot` (schedule) | `instructor_id` | `instructor` (instructor) |
 | `member` (membership) | `instructor_id` | `instructor` (instructor) |
 | `entitlement` (entitlement) | `member_id` | `member` (membership) |
 | `subscription` (entitlement) | `member_id` | `member` (membership) |
@@ -70,7 +71,7 @@ flowchart LR
 
 ## 데이터 격리
 
-소유자 컬럼 `instructor_id`는 **뿌리 세 곳에만** 둔다. 나머지 테이블은 부모를 타고 올라가면 소유자를 알 수 있다.
+소유자 컬럼 `instructor_id`는 **부모가 없는 테이블과 `class_slot`에만** 둔다. 나머지 테이블은 부모를 타고 올라가면 소유자를 알 수 있다.
 
 | 테이블 | `instructor_id` | 소유자를 어떻게 아나 |
 |---|---|---|
@@ -78,11 +79,11 @@ flowchart LR
 | member | **있음** | 직접. 부모가 없다 |
 | recurrence | **있음** | 직접. 부모가 없다 |
 | instructor_session | 있음 | 직접. 세션의 주인 |
-| class_slot | 없음 | `recurrence_id` → `recurrence.instructor_id` |
+| class_slot | **있음** | 직접. 일회성 수업은 `recurrence_id`가 NULL이라 부모를 탈 수 없다 |
 | member_link · entitlement · subscription · booking · waitlist · event_log | 없음 | `member_id` → `member.instructor_id` |
 | entitlement_adjustment | 없음 | `entitlement_id` → `entitlement.member_id` → `member.instructor_id` |
 
-중복 컬럼을 두면 부모와 어긋날 수 있다. 조인이 얕으므로 부모를 타는 쪽을 택한다.
+중복 컬럼을 두면 부모와 어긋날 수 있다. 조인이 얕으므로 부모를 타는 쪽을 택한다. `class_slot`만 예외다. 규칙이 만든 슬롯은 `recurrence.instructor_id`와 같은 값을 한 번 더 저장하고, 복합 FK `(recurrence_id, instructor_id) → recurrence (id, instructor_id)`가 두 값이 어긋나지 않게 막는다([BE-0001](../spec/instructor/0001-instructor-setup/prd.md)).
 
 격리는 DB가 자동으로 해주지 않는다. **강사 화면의 모든 쿼리에 소유자 조건이 들어가야 한다**(PRD 1 AC 1.3). 한 군데 빠뜨리면 남의 데이터가 나온다. 강사가 1명뿐인 테스트 데이터에서는 조건을 빠뜨려도 결과가 같아 통과하므로, **테스트 데이터에 강사를 반드시 2명 이상 만든다.**
 
@@ -93,11 +94,10 @@ flowchart LR
 SELECT * FROM member
  WHERE instructor_id = $me AND status = 'ACTIVE';
 
--- 시간표. class_slot에는 instructor_id가 없으므로 recurrence를 탄다
+-- 시간표. recurrence를 조인하면 일회성 수업이 빠지므로 class_slot의 소유자를 직접 본다
 SELECT c.*
   FROM class_slot c
-  JOIN recurrence r ON r.id = c.recurrence_id
- WHERE r.instructor_id = $me
+ WHERE c.instructor_id = $me
    AND c.canceled_at IS NULL
    AND c.starts_at >= now();
 
@@ -106,9 +106,8 @@ SELECT m.name
   FROM booking b
   JOIN member m     ON m.id = b.member_id
   JOIN class_slot c ON c.id = b.class_slot_id
-  JOIN recurrence r ON r.id = c.recurrence_id
  WHERE b.class_slot_id = $1 AND b.status = 'ACTIVE'
-   AND r.instructor_id = $me;   -- 남의 수업 id를 넣어도 빈 결과
+   AND c.instructor_id = $me;   -- 남의 수업 id를 넣어도 빈 결과
 ```
 
 마지막 쿼리의 소유자 조건이 특히 중요하다. 없으면 다른 강사의 `class_slot_id`를 넣는 것만으로 그쪽 명단이 나온다(PRD 1 AC 1.3.2).

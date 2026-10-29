@@ -15,6 +15,11 @@ BE 내부 설계 결정. FE와 같이 따르는 결정은 [PRD 레포 `decisions
 | [BE-ADR-0005](0005-snapshot-capacity.md) | 슬롯의 정원은 생성 시점에 복사한다 | accepted |
 | [BE-ADR-0006](0006-time-and-timezone.md) | 시각은 `timestamptz`, 날짜 계산의 타임존은 `Asia/Seoul` 상수로 한다 | accepted |
 | [BE-ADR-0007](0007-class-slot-naming.md) | 슬롯 테이블 이름은 `class_slot`이다 | accepted |
-| [BE-ADR-0008](0008-session-store.md) | 강사 세션 저장소를 직접 만들지, Spring Session JDBC를 쓸지 | proposed |
+| [BE-ADR-0008](0008-session-store.md) | 강사 세션 저장소는 직접 만든 `instructor_session` 테이블로 한다 | accepted |
 | [BE-ADR-0009](0009-entitlement-kind-exclusion.md) | 수강권 종류 겹침은 등록 검사 + EXCLUDE 제약 두 겹으로 막는다 | accepted |
 | [BE-ADR-0010](0010-restored-in-0003.md) | `booking.restored`는 기능 0003(마이그레이션 002)에서 만든다 | accepted |
+| [BE-ADR-0011](0011-modular-monolith.md) | 서버 하나에 도메인 6개를 모듈로 나누고, Spring Modulith 테스트로 경계를 지킨다 | accepted |
+| [BE-ADR-0012](0012-jdbc-client.md) | 데이터 접근은 `JdbcClient`로 SQL을 직접 쓴다 | accepted |
+| [BE-ADR-0013](0013-stack-and-testing.md) | 기술 스택은 Java LTS · Spring Boot · Spring MVC · Flyway, 테스트는 Testcontainers로 실제 PostgreSQL에 대해 한다 | accepted |
+| [BE-ADR-0014](0014-kakao-login-direct.md) | 카카오 로그인은 Spring Security OAuth2 Client 없이 직접 구현한다 | accepted |
+| [BE-ADR-0015](0015-hosting-lightsail.md) | BE는 AWS Lightsail 1대에 Docker Compose(Caddy · Spring · PostgreSQL)로 올린다 | accepted |

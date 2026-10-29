@@ -23,10 +23,10 @@ erDiagram
     SUBSCRIPTION {
         bigint id PK
         bigint member_id FK
-        text period_unit "WEEK MONTH"
+        text period_unit "WEEK FOUR_WEEKS"
         int count_per_period
         date starts_on "강사 지정"
-        int period_count
+        int period_count "주기 수"
         date ends_on
     }
     ENTITLEMENT_ADJUSTMENT {

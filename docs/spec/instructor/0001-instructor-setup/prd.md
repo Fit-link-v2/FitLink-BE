@@ -38,7 +38,8 @@ erDiagram
         int open_range_days "기본 14 · PRD 1"
     }
 
-    RECURRENCE ||--o{ CLASS_SLOT : "매주 슬롯 생성"
+    INSTRUCTOR ||--o{ CLASS_SLOT : "자기 수업"
+    RECURRENCE |o--o{ CLASS_SLOT : "매주 슬롯 생성"
     RECURRENCE {
         bigint id PK
         bigint instructor_id FK
@@ -49,7 +50,8 @@ erDiagram
     }
     CLASS_SLOT {
         bigint id PK
-        bigint recurrence_id FK
+        bigint instructor_id FK
+        bigint recurrence_id FK "NULL이면 일회성"
         date occurs_on "원래 날짜"
         timestamptz starts_at
         int capacity
@@ -90,10 +92,10 @@ erDiagram
     SUBSCRIPTION {
         bigint id PK
         bigint member_id FK
-        text period_unit "WEEK MONTH"
+        text period_unit "WEEK FOUR_WEEKS"
         int count_per_period
         date starts_on
-        int period_count
+        int period_count "주기 수"
         date ends_on
     }
 ```
@@ -182,7 +184,7 @@ UPDATE instructor_session SET revoked_at = now()
 
 만료를 요청마다 연장하면 요청마다 쓰기가 한 번 생긴다. 강사 수십 명 규모에서는 문제되지 않는다. 부담이 되면 `last_seen_at`이 일정 시간 이상 지났을 때만 갱신한다. 만료되거나 로그아웃한 행은 주기적으로 지운다. 세션은 이력이 아니라 보안 자료라 BE-ADR-0003(지우지 않는다)의 예외다.
 
-이 테이블을 직접 만들지, Spring Session JDBC를 쓸지는 [BE-ADR-0008](../../../decisions/0008-session-store.md)에서 다룬다. Spring Session JDBC의 기본 스키마는 세션 ID를 원본으로 저장한다.
+Spring Session JDBC를 쓰지 않고 이 테이블을 직접 만든다([BE-ADR-0008](../../../decisions/0008-session-store.md)). Spring Session JDBC의 기본 스키마는 세션 ID를 원본으로 저장한다.
 
 #### 2. 시간표
 
@@ -194,7 +196,10 @@ CREATE TABLE recurrence (
   start_time    time        NOT NULL,
   capacity      int         NOT NULL CHECK (capacity BETWEEN 1 AND 50),
   active        boolean     NOT NULL DEFAULT true,
-  created_at    timestamptz NOT NULL DEFAULT now()
+  created_at    timestamptz NOT NULL DEFAULT now(),
+
+  -- class_slot의 복합 FK 대상. id가 이미 유일하므로 행을 더 제한하지 않는다
+  CONSTRAINT recurrence_owner_uk UNIQUE (id, instructor_id)
 );
 
 CREATE INDEX recurrence_owner_idx ON recurrence (instructor_id);
@@ -205,28 +210,38 @@ CREATE UNIQUE INDEX recurrence_slot_uidx
 
 CREATE TABLE class_slot (
   id            bigserial   PRIMARY KEY,
-  recurrence_id bigint      NOT NULL REFERENCES recurrence(id),
-  occurs_on     date        NOT NULL,   -- 반복 규칙이 만든 원래 날짜. 시각을 바꿔도 그대로
+  instructor_id bigint      NOT NULL REFERENCES instructor(id),
+  recurrence_id bigint,                 -- NULL이면 일회성 수업
+  occurs_on     date        NOT NULL,   -- 원래 날짜. 시각을 바꿔도 그대로. 일회성이면 수업 날짜
   starts_at     timestamptz NOT NULL,
   capacity      int         NOT NULL CHECK (capacity >= 0),
   taken         int         NOT NULL DEFAULT 0,
   canceled_at   timestamptz,
   created_at    timestamptz NOT NULL DEFAULT now(),
 
+  -- 규칙이 만든 슬롯은 그 규칙의 강사와 같은 instructor_id를 가진다
+  CONSTRAINT class_slot_recurrence_owner_fk
+    FOREIGN KEY (recurrence_id, instructor_id) REFERENCES recurrence (id, instructor_id),
   CONSTRAINT class_slot_occurrence_uk UNIQUE (recurrence_id, occurs_on),
   CONSTRAINT class_slot_taken_range CHECK (taken >= 0 AND taken <= capacity)
 );
 
--- 회원 화면은 항상 "휴강 아닌 슬롯을 시각순으로" 읽는다.
-CREATE INDEX class_slot_open_starts_at_idx
-  ON class_slot (starts_at) WHERE canceled_at IS NULL;
+-- 강사 · 회원 화면은 항상 "그 강사의 휴강 아닌 슬롯을 시각순으로" 읽는다.
+CREATE INDEX class_slot_owner_open_idx
+  ON class_slot (instructor_id, starts_at) WHERE canceled_at IS NULL;
 ```
+
+**일회성 수업.** 반복 규칙 없이 한 번만 여는 수업(와이어프레임 I-03 "한 번만")도 `class_slot` 행이다. `recurrence_id`가 NULL이고 정원은 강사가 직접 넣는다. 1차 배포에 포함한다. 생성 API의 모양은 PRD-0001에 AC가 추가된 뒤 prd 단계에서 정한다.
+
+**소유자는 `class_slot.instructor_id`로 직접 본다.** 일회성 수업은 `recurrence`가 없으므로 `recurrence`를 타고 소유자를 찾을 수 없다. 강사 · 회원 화면의 슬롯 쿼리는 `recurrence`를 조인하지 않고 `class_slot.instructor_id`로 거른다. `recurrence`를 inner join하면 일회성 수업이 결과에서 빠진다.
+
+**복합 FK가 소유자 불일치를 막는다.** `instructor_id`는 규칙이 만든 슬롯에서 `recurrence.instructor_id`와 같은 값을 한 번 더 저장한다. 두 값이 어긋나면 강사 A의 규칙이 만든 슬롯이 강사 B 화면에 나온다. `class_slot_recurrence_owner_fk`가 `(recurrence_id, instructor_id)` 쌍이 `recurrence`에 실제로 있어야 저장되게 한다. 그 대상이 되도록 `recurrence`에 `UNIQUE (id, instructor_id)`를 둔다. FK 컬럼 중 하나라도 NULL이면 PostgreSQL은 FK를 검사하지 않으므로(기본 `MATCH SIMPLE`), 일회성 수업은 이 FK에 걸리지 않는다.
 
 `class_slot.capacity`는 생성 시점에 `recurrence.capacity`를 복사한다. 반복 규칙의 정원을 나중에 바꿔도 이미 생성된 슬롯은 흔들리지 않는다. 복사하지 않고 참조하면 "그때 정원이 몇이었나"를 영원히 복원할 수 없다.
 
 `class_slot_taken_range`는 예약 트랜잭션의 조건부 UPDATE가 뚫렸을 때를 막는 마지막 방어선이다. 애플리케이션 버그로 정원을 넘기는 UPDATE가 들어오면 DB가 거부한다.
 
-**슬롯 생성의 중복 방지 키는 `(recurrence_id, occurs_on)`이다.** `starts_at`으로 걸면 강사가 개별 슬롯의 시각을 바꾼 뒤(PRD 1 AC 2.3.2) 다음 배치가 "원래 시각 슬롯이 없다"고 보고 다시 만든다. 그러면 AC 2.3.3(변경은 그 슬롯에만)과 AC 2.2.2(여러 번 돌려도 결과 같음)가 깨진다. 원래 날짜를 따로 저장하고 그것으로 중복을 막으면 시각을 바꿔도 배치가 같은 회차를 다시 만들지 않는다. 휴강은 행을 지우지 않으므로(`canceled_at`) 역시 다시 만들어지지 않는다.
+**슬롯 생성의 중복 방지 키는 `(recurrence_id, occurs_on)`이다.** `starts_at`으로 걸면 강사가 개별 슬롯의 시각을 바꾼 뒤(PRD 1 AC 2.3.2) 다음 배치가 "원래 시각 슬롯이 없다"고 보고 다시 만든다. 그러면 AC 2.3.3(변경은 그 슬롯에만)과 AC 2.2.2(여러 번 돌려도 결과 같음)가 깨진다. 원래 날짜를 따로 저장하고 그것으로 중복을 막으면 시각을 바꿔도 배치가 같은 회차를 다시 만들지 않는다. 휴강은 행을 지우지 않으므로(`canceled_at`) 역시 다시 만들어지지 않는다. 일회성 수업은 `recurrence_id`가 NULL이라 이 유니크의 대상이 아니다(UNIQUE는 NULL끼리를 같은 값으로 보지 않는다). 배치가 만드는 행이 아니므로 중복 생성 문제도 없다.
 
 반복 주기는 매주로 고정돼 있다. 격주 · 월 n번째 주는 PRD 1의 범위 밖이다(인터뷰 7번). 넣게 되면 `recurrence`에 `interval_weeks`와 `anchor_date` 두 컬럼이 붙는다. 기존 행은 각각 1과 생성일로 채우면 되므로 나중에 넣어도 비용이 낮다.
 
@@ -272,21 +287,26 @@ CREATE UNIQUE INDEX member_link_active_uidx
 `entitlement.source_id`가 `subscription`을 가리키므로 `subscription`을 먼저 만든다. 설명은 5절.
 
 ```sql
--- 월 정액 등록 1건 (DEC-0004). 차감 대상이 아니라 주기별 entitlement를 만들어내는 설정이다.
+-- 월 정액 등록 1건 (DEC-0011). 차감 대상이 아니라 주기별 entitlement를 만들어내는 설정이다.
 CREATE TABLE subscription (
   id               bigserial   PRIMARY KEY,
   member_id        bigint      NOT NULL REFERENCES member(id),
-  period_unit      text        NOT NULL CHECK (period_unit IN ('WEEK', 'MONTH')),
+  -- WEEK = 주당 N회(주기 7일), FOUR_WEEKS = 4주마다 N회(주기 28일)
+  period_unit      text        NOT NULL CHECK (period_unit IN ('WEEK', 'FOUR_WEEKS')),
   count_per_period int         NOT NULL CHECK (count_per_period > 0),
   starts_on        date        NOT NULL,   -- 강사가 지정한 시작일. 주기는 여기서부터 센다
-  period_count     int         NOT NULL CHECK (period_count > 0),   -- 4주, 3개월
+  period_count     int         NOT NULL CHECK (period_count > 0),   -- 주기 수. 8주 등록이면 WEEK 8, FOUR_WEEKS 2
   ends_on          date        NOT NULL,   -- 마지막 주기의 마지막 날. 등록할 때 계산해 저장
   created_at       timestamptz NOT NULL DEFAULT now(),
 
   CONSTRAINT subscription_range_order CHECK (starts_on <= ends_on),
-  -- 주 단위는 종료일이 시작일과 주기 수로 정해진다. 월 단위는 Q12가 정해지면 같은 CHECK를 붙인다
-  CONSTRAINT subscription_week_end
-    CHECK (period_unit <> 'WEEK' OR ends_on = starts_on + 7 * period_count - 1)
+  -- 등록 기간은 4주 단위다. 주당 방식은 주기 수가 4의 배수여야 한다
+  CONSTRAINT subscription_four_week_multiple
+    CHECK (period_unit <> 'WEEK' OR period_count % 4 = 0),
+  -- 종료일은 시작일과 주기 수로 정해진다
+  CONSTRAINT subscription_end
+    CHECK (ends_on = starts_on
+                     + (CASE period_unit WHEN 'WEEK' THEN 7 ELSE 28 END) * period_count - 1)
 );
 
 CREATE INDEX subscription_member_idx ON subscription (member_id);
@@ -342,7 +362,7 @@ ALTER TABLE entitlement ADD CONSTRAINT entitlement_kind_no_overlap
 
 `entitlement_source_shape`가 "월 정액 행은 반드시 등록을 가리키고, 횟수권 행은 아무것도 가리키지 않는다"를 강제한다.
 
-**주기 계산.** 주기는 `starts_on`부터 센다(PRD 1 AC 3.2.7). 주 단위면 7일씩, 월 단위면 한 달씩이다. `ends_on`은 등록할 때 마지막 주기의 끝으로 계산해 저장한다. 월 단위에서 시작일이 29~31일일 때 짧은 달을 어떻게 셀지는 정하지 않았다(열린 질문 Q12).
+**주기 계산.** 주기는 `starts_on`부터 센다(PRD 1 AC 3.2.7). `WEEK`면 7일씩, `FOUR_WEEKS`면 28일씩이다. 월 단위는 두지 않는다([DEC-0011](https://github.com/Fit-link-v2/Fit-link-PRD/blob/main/decisions/0011-entitlement-rules-four-week-and-sequential-kinds.md)). 주기 길이가 고정이라 `ends_on = starts_on + 7 또는 28 × period_count − 1`을 CHECK로 강제할 수 있다. 등록 기간은 4주의 배수이므로 `FOUR_WEEKS`는 어떤 주기 수든 맞고, `WEEK`는 주기 수가 4의 배수여야 한다.
 
 **주기별 수강권 생성.** 등록할 때와 매일 1회 배치에서 같은 쿼리를 돈다. 오픈 범위 안의 수업을 예약할 수 있어야 하므로, 오늘부터 그 강사의 오픈 범위 끝까지에 걸치는 주기를 미리 만든다(AC 3.2.8). `ends_on`을 넘는 주기는 만들지 않는다(AC 3.2.9). `entitlement_period_uidx`와 `INSERT ... ON CONFLICT DO NOTHING`으로 몇 번을 돌려도 중복이 생기지 않는다. 절차는 [수강권 쓰기 경로](../../entitlement/write-paths.md)에 있다.
 
@@ -369,7 +389,7 @@ PRD 단위가 배포 단위는 아니다. 1차 배포에는 PRD 1~3이 함께 �
 | 에러 본문 | `{ "code": "...", "message": "..." }`. 코드마다 더하는 필드는 에러 코드 목록 참고 |
 | 상태 코드 | 409는 같은 것이 이미 있음, 422는 지금 상태가 전제 조건을 채우지 못함(PRD-0003 AC 3.1과 같은 구분. SEAT_TAKEN 409는 경합이라 예외) |
 | 판정 순서 | 401 → 403 → 400 → 404 → 409 · 422. 남의 id와 없는 id는 같은 404(PRD-0001 AC 1.3.2). 슬롯 시각 변경은 2절 순서 |
-| DB 제약 위반 | 500이 아니라 해당 코드로 바꾼다. 유니크(23505) → RECURRENCE_DUPLICATE, EXCLUDE(23P01) → ENTITLEMENT_PERIOD_OVERLAP |
+| DB 제약 위반 | 500이 아니라 해당 코드로 바꾼다. SQLState가 아니라 제약 이름으로 고른다(BE-ADR-0012). `recurrence_slot_uidx` → RECURRENCE_DUPLICATE, `entitlement_kind_no_overlap` → ENTITLEMENT_PERIOD_OVERLAP. 표에 없는 제약은 500 |
 | 재시도 · 중복 클릭 | GET이 아닌 요청은 자동 재시도하지 않고, 응답이 올 때까지 버튼을 막는다. 타임아웃이면 GET으로 확인한다(PRD-0003 AC 3.2) |
 
 #### 1. 로그인 · 로그아웃 (I-01, I-13)
@@ -405,7 +425,7 @@ PRD 단위가 배포 단위는 아니다. 1차 배포에는 PRD 1~3이 함께 �
 { "id": 101, "startsAt": "2026-09-09T19:00:00+09:00", "capacity": 8, "taken": 3, "canceledAt": null }
 // SlotDetail
 { "id": 101, "startsAt": "2026-09-09T19:00:00+09:00", "capacity": 8, "taken": 3, "canceledAt": null,
-  "recurrence": { "id": 4, "weekday": "WED", "startTime": "19:00" } }
+  "recurrence": { "id": 4, "weekday": "WED", "startTime": "19:00" } }   // 일회성 수업이면 null
 ```
 
 - 규칙 목록: 월 ~ 일, 같은 요일은 시각 순
@@ -452,7 +472,7 @@ PRD 단위가 배포 단위는 아니다. 1차 배포에는 PRD 1~3이 함께 �
 
 #### 5. 수강권 (I-10, I-11)
 
-카드는 횟수권 · 월 정액을 모두 다루고 회원 화면 카드와 같은 모양이다(DEC-0010, PRD-0001 AC 3.2.20). 등록은 횟수권만 다룬다(Q23).
+카드는 횟수권 · 월 정액을 모두 다루고 회원 화면 카드와 같은 모양이다(DEC-0010, PRD-0001 AC 3.2.20). 아래 표의 등록은 횟수권만 다룬다. 월 정액 등록 API도 1차 배포에 들어가며, 요청 모양은 prd 단계에서 정한다(Q23).
 
 | 메서드 | 경로 | 요청 | 응답 | 에러 |
 |---|---|---|---|---|
@@ -506,22 +526,24 @@ PRD 단위가 배포 단위는 아니다. 1차 배포에는 PRD 1~3이 함께 �
 
 | PRD · AC | 요구 | 물리 제약 |
 |---|---|---|
-| (제품 형태) | 강사끼리 데이터가 섞이지 않음 | `member.instructor_id`, `recurrence.instructor_id`, `setting` PK |
+| (제품 형태) | 강사끼리 데이터가 섞이지 않음 | `member.instructor_id`, `recurrence.instructor_id`, `class_slot.instructor_id`, `setting` PK |
 | 1 · AC 2.1.1 | 정원 1 이상 50 이하 | `recurrence` CHECK capacity BETWEEN 1 AND 50 |
 | 1 · AC 1.1.6 | 세션 2주, 요청마다 연장 | `instructor_session.expires_at` 조건부 UPDATE |
 | 1 · AC 1.1.7 | 로그아웃 즉시 무효 | `instructor_session.revoked_at` |
 | 1 · AC 1.2.2 | 가입 시 설정 1행 | `setting` PK = instructor_id. 가입 트랜잭션에서 INSERT |
 | 1 · AC 1.2.3 | 같은 카카오 계정은 한 번만 가입 | `instructor_identity_uk` (provider, provider_user_id) |
-| 1 · AC 1.3.1 | 강사는 자기 데이터만 | `member.instructor_id`, `recurrence.instructor_id`. 모든 강사 화면 쿼리에 소유자 조건 |
+| 1 · AC 1.3.1 | 강사는 자기 데이터만 | `member.instructor_id`, `recurrence.instructor_id`, `class_slot.instructor_id`. 모든 강사 화면 쿼리에 소유자 조건 |
 | 1 · AC 2.1.3 | 같은 규칙 재저장해도 슬롯 중복 없음 | `class_slot` UNIQUE (recurrence_id, occurs_on) |
 | 1 · AC 2.2.2 | 배치를 여러 번 돌려도 결과 동일 | 위 유니크 + INSERT ... ON CONFLICT DO NOTHING |
 | 1 · AC 2.3.1 | 휴강. 예약이 있으면 확인 창 | `class_slot.canceled_at` + `booking.cancel_reason` (처리는 write-paths 5.2) |
 | 1 · AC 2.3.2 | 예약이 있는 슬롯은 시각 변경 불가 | 조건부 UPDATE `WHERE taken = 0` ([쓰기 경로](../../booking/write-paths.md)) |
 | 1 · AC 2.3.3 | 삭제 · 변경은 해당 슬롯에만 | `recurrence`와 `class_slot`을 분리. 규칙은 안 건드린다 |
+| (일회성 수업, PRD-0001 AC 추가 예정) | 반복 규칙 없이 한 번만 여는 수업 | `class_slot.recurrence_id` NULL 허용. 규칙이 만든 슬롯의 소유자 일치는 복합 FK `class_slot_recurrence_owner_fk` |
 | 1 · AC 2.4.1 | 오픈 범위 7~28일 | `setting` CHECK open_range_days BETWEEN 7 AND 28 |
 | 1 · AC 3.1.2 | 동명이인 허용 | `member.name`에 UNIQUE 없음 (의도적 부재) |
 | 1 · AC 3.2.3 · 3 · AC 5.2.1 | 잔여는 0 이상 max_count 이하 | `entitlement` CHECK used_count 범위 |
-| 1 · AC 3.2.6 | 월 정액 입력값 | `subscription` CHECK period_unit · count_per_period · period_count |
+| 1 · AC 3.2.6 | 월 정액 입력값 | `subscription` CHECK period_unit(`WEEK` · `FOUR_WEEKS`) · count_per_period · period_count |
+| (DEC-0011) | 등록 기간은 4주 단위, 종료일은 마지막 주기의 마지막 날 | `subscription_four_week_multiple` · `subscription_end` CHECK |
 | 1 · AC 3.2.8 | 주기별 수강권 자동 생성, 중복 없음 | `entitlement_period_uidx` (source_id, window_start) |
 | 1 · AC 3.2.9 | 마지막 주기 뒤로는 만들지 않음 | 생성 쿼리의 `generate_series(0, period_count - 1)` |
 | 1 · AC 3.2.10 | 다른 종류 기간 겹침 금지 | `entitlement_kind_no_overlap` EXCLUDE + 등록 시 애플리케이션 검사 |
@@ -547,17 +569,17 @@ PRD 단위가 배포 단위는 아니다. 1차 배포에는 PRD 1~3이 함께 �
 | ~~Q8~~ | ~~OAuth provider를 무엇으로 할 것인가~~ | **해소.** 카카오([DEC-0001](https://github.com/Fit-link-v2/Fit-link-PRD/blob/main/decisions/0001-instructor-kakao-oauth.md)). CHECK는 `KAKAO` 하나 |
 | ~~Q9~~ | ~~가입을 열어둘 것인가~~ | **해소.** 개방([DEC-0001](https://github.com/Fit-link-v2/Fit-link-PRD/blob/main/decisions/0001-instructor-kakao-oauth.md)) |
 | Q10 | 휴강 통보를 어떻게 할 것인가 | 강사가 카톡으로 한다([DEC-0006](https://github.com/Fit-link-v2/Fit-link-PRD/blob/main/decisions/0006-booking-rules.md)). 회원이 링크를 열기 전까지 모른다. 자동 알림은 PRD 0에서 범위 밖 |
-| Q11 | 세션 저장을 직접 만들지, Spring Session JDBC를 쓸지 | [BE-ADR-0008](../../../decisions/0008-session-store.md) (proposed) |
-| Q12 | 월 단위 주기에서 시작일이 29~31일이면 짧은 달을 어떻게 세나 | `ends_on`과 주기별 `window_start`·`window_end` 계산이 달라진다. PRD 1 열린 질문과 같다 |
+| ~~Q11~~ | ~~세션 저장을 직접 만들지, Spring Session JDBC를 쓸지~~ | **해소.** 직접 만든 `instructor_session`([BE-ADR-0008](../../../decisions/0008-session-store.md)) |
+| ~~Q12~~ | ~~월 단위 주기에서 시작일이 29~31일이면 짧은 달을 어떻게 세나~~ | **해소.** 월 단위를 없애고 `WEEK` · `FOUR_WEEKS` 두 가지로 한다([DEC-0011](https://github.com/Fit-link-v2/Fit-link-PRD/blob/main/decisions/0011-entitlement-rules-four-week-and-sequential-kinds.md)). 종료일 CHECK를 두 단위 모두에 건다 |
 | Q13 | 월 정액을 중간에 끝내면 | 남은 주기, 이미 만든 수강권, 그 수강권으로 잡은 예약을 어떻게 할지. 정하기 전까지 `subscription`에는 종료 컬럼을 두지 않는다 |
 | Q14 | 카카오 이메일을 못 받으면 | 비즈 앱 전환이 막히면 `instructor.email`이 계속 비어 있다. 스키마는 이미 NULL을 허용한다 |
-| Q17 | 슬롯 생성 배치의 SQL과 타임존 변환 | `recurrence × 날짜 → class_slot`의 SQL이 아직 없다. `occurs_on + start_time`을 `Asia/Seoul` 기준 `timestamptz`로 바꾸는 방법과 함께 이 기능의 prd 단계에서 쓴다 |
+| Q17 | 슬롯 생성 배치의 SQL과 타임존 변환 | `recurrence × 날짜 → class_slot`의 SQL이 아직 없다. `occurs_on + start_time`을 `Asia/Seoul` 기준 `timestamptz`로 바꾸는 방법과 함께 이 기능의 prd 단계에서 BE가 쓴다. 배치는 빠진 날을 따로 계산하지 않고 매번 `[오늘, 오늘 + 오픈 범위)` 전체를 `ON CONFLICT DO NOTHING`으로 돈다. 새 행의 `instructor_id`는 `recurrence.instructor_id`를 넣는다 |
 | Q18 | 규칙을 끄고 같은 요일 · 시각으로 새 규칙을 만들면 | 부분 유니크가 `WHERE active`라 허용되고, 끈 규칙의 남은 슬롯과 새 규칙의 슬롯이 같은 시각에 둘 다 생긴다. 끈 규칙을 다시 켜면 유니크 위반이다. 재활성화 흐름을 정해야 한다 |
 | Q19 | 오픈 범위를 늘릴 때 월 정액 주기도 즉시 만들 것인가 | 슬롯은 즉시 채운다(AC 2.4.2). 수강권 주기를 다음 배치까지 기다리면 그 사이 늘어난 날짜의 수업은 보이는데 예약하면 NO_REMAINING이다. 오픈 범위 변경 트랜잭션에서 그 강사의 주기 생성도 같이 돌리는 것을 제안한다 |
 | Q20 | AC 대 제약 표가 아직 모든 AC를 덮지 않는다 | 1.2.1, 1.3.2, 2.1.4, 2.4.2, 3.2.5, 3.2.7, 3.3.3, 5.1.1 등. 템플릿 형식으로 다시 쓰는 prd 단계에서 채운다 |
 | Q21 | 시작한 슬롯의 시각 변경 · 휴강 거부(API 2절)와 지난 시각으로 옮기기 거부(400)는 PRD에 AC가 없다 | 후속. PRD-0001 AC 2.3 · PRD-0003 AC 7에 AC 추가 |
 | Q22 | 회원 목록 정렬(미개봉 → ACTIVE → ENDED)의 근거 AC가 없다 | 와이어프레임 설명만 있다. PRD에 AC로 올릴지 |
-| Q23 | 월 정액 등록 요청 모양 | I-11/월 정액 미작성. DEC-0011의 입력(횟수 제한 방식 · 횟수 · 시작일 · 4주 단위 기간), `subscription` DDL 변경, [수강권 쓰기 경로](../../entitlement/write-paths.md) 1.1의 만료 전 다른 종류 검사를 같이 한다 |
+| Q23 | 월 정액 등록 요청 모양 | 1차 배포에 포함한다. 요청 모양은 이 기능의 prd 단계에서 정한다. I-11/월 정액 미작성. DEC-0011의 입력(횟수 제한 방식 · 횟수 · 시작일 · 4주 단위 기간)과 [수강권 쓰기 경로](../../entitlement/write-paths.md) 1.1의 만료 전 다른 종류 검사를 같이 한다 |
 | Q24 | 만료되지 않은 다른 종류가 있을 때 등록 전 안내(AC 3.2.16)에 쓸 값 | 화면 미정. `MemberDetail`에 종류별 등록 가능일을 줄지 |
 | Q25 | 휴강한 슬롯을 강사 슬롯 목록에 넣나 | `/instructor/slots` 조회 조건 |
 | Q26 | 오픈 범위를 줄인 뒤 범위 밖에 남은 슬롯(AC 2.4.2)을 강사에게 보이나 | `/instructor/slots` 조회 끝 |
@@ -567,5 +589,5 @@ PRD 단위가 배포 단위는 아니다. 1차 배포에는 PRD 1~3이 함께 �
 | Q30 | 로그인 성공 · 실패 뒤 이동할 `app.` 경로와 실패를 알리는 방법(예: `?login=failed`) | 콜백 302 목적지. DEC-0008 합의할 것 3번 |
 | Q31 | 입력 상한: 이름 · 메모 길이, 횟수권 `maxCount`, 지난 날짜 횟수권 등록 | 400 조건 |
 | Q32 | 회원 링크 도메인 | `linkUrl`. DEC-0007, DEC-0008 |
-| Q33 | 반복 규칙과 별개인 일회성 수업(I-03 "한 번만")을 1차에 넣나 | 넣으면 `class_slot` 소유자 표현과 API를 추가한다. PRD-0001 AC 2.3.2는 범위 밖 |
+| ~~Q33~~ | ~~반복 규칙과 별개인 일회성 수업(I-03 "한 번만")을 1차에 넣나~~ | **해소.** 1차에 넣는다(FE 합의). `class_slot.instructor_id` 추가 · `recurrence_id` NULL 허용 · 복합 FK로 반영했다. 생성 API는 PRD-0001에 AC가 추가된 뒤 prd 단계에서 정한다 |
 | Q34 | API 절의 규칙 중 PRD에 AC가 없는 것: 규칙 목록 정렬, 오늘 지난 회차 미생성, 슬롯 목록에서 진행 중 수업 제외, 카드 순서 2 ~ 4단계, 두 422가 겹칠 때 OTHER_KIND_ACTIVE 우선, `frontCard` null 조건 | BE가 정한 기본값. FE 확인 후 필요하면 PRD에 AC로 올린다 |

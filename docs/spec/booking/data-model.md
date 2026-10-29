@@ -61,12 +61,11 @@ erDiagram
 SELECT now() < c.starts_at - (s.cancel_deadline_hours || ' hours')::interval
          AS restorable
   FROM class_slot c
-  JOIN recurrence r ON r.id = c.recurrence_id
-  JOIN setting    s ON s.instructor_id = r.instructor_id
+  JOIN setting    s ON s.instructor_id = c.instructor_id
  WHERE c.id = $1;
 ```
 
-`setting`이 강사별이므로 `recurrence`를 타고 그 강사의 설정을 찾는다. 강사 A의 회원은 3시간 전까지, 강사 B의 회원은 24시간 전까지가 될 수 있다.
+`setting`이 강사별이므로 슬롯의 `instructor_id`로 그 강사의 설정을 찾는다. `recurrence`를 타면 일회성 수업이 빠진다. 강사 A의 회원은 3시간 전까지, 강사 B의 회원은 24시간 전까지가 될 수 있다.
 
 정확히 마감 시각이면 복구 불가다. `<`이지 `<=`가 아니다.
 

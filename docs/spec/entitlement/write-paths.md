@@ -55,7 +55,7 @@ RETURNING id;
 COMMIT;
 ```
 
-`$ends_on`은 애플리케이션이 계산한다. 주 단위면 `starts_on + 7 × period_count - 1일`이다. 월 단위는 짧은 달 처리가 정해지지 않았다(BE-0001 열린 질문 Q12).
+`$ends_on`은 애플리케이션이 계산한다. `starts_on + 주기 길이 × period_count - 1일`이고, 주기 길이는 `WEEK` 7일 · `FOUR_WEEKS` 28일이다([DEC-0011](https://github.com/Fit-link-v2/Fit-link-PRD/blob/main/decisions/0011-entitlement-rules-four-week-and-sequential-kinds.md)). DB의 `subscription_end` CHECK가 같은 식을 강제한다.
 
 거부할 때의 에러 코드는 API 설계에서 정한다.
 
@@ -66,26 +66,26 @@ COMMIT;
 매일 1회 배치와 월 정액 등록 직후에 같은 쿼리를 돈다. 강사가 오픈 범위를 늘릴 때도 돌리는 것을 제안한다(BE-0001 Q19). 오늘부터 그 강사의 오픈 범위 끝까지에 걸치는 주기를 만든다(PRD 1 AC 3.2.8). 오픈 범위는 `[오늘, 오늘 + N일)`이다([BE-ADR-0006](../../decisions/0006-time-and-timezone.md)). 회원이 오픈 범위 안의 수업을 예약하려면 그 수업 날짜를 덮는 수강권 행이 이미 있어야 하기 때문이다.
 
 ```sql
--- 주 단위. $today = (now() AT TIME ZONE 'Asia/Seoul')::date
+-- $today = (now() AT TIME ZONE 'Asia/Seoul')::date
 INSERT INTO entitlement (member_id, kind, window_start, window_end, max_count, source_id)
 SELECT s.member_id, 'SUBSCRIPTION',
-       p.start, LEAST(p.start + 6, s.ends_on),
+       p.start, p.start + u.len - 1,
        s.count_per_period, s.id
   FROM subscription s
   JOIN member  m  ON m.id = s.member_id
   JOIN setting st ON st.instructor_id = m.instructor_id
+  CROSS JOIN LATERAL (SELECT CASE s.period_unit WHEN 'WEEK' THEN 7 ELSE 28 END AS len) AS u
   CROSS JOIN LATERAL generate_series(0, s.period_count - 1) AS g(n)
-  CROSS JOIN LATERAL (SELECT s.starts_on + 7 * g.n AS start) AS p
- WHERE s.id = $subscription_id                      -- 한 건씩 돈다
-   AND s.period_unit = 'WEEK'
-   AND p.start     <  $today + st.open_range_days   -- 오픈 범위 [오늘, 오늘+N) 안에서 시작
-   AND p.start + 6 >= $today                         -- 이미 끝난 주기는 건너뜀
+  CROSS JOIN LATERAL (SELECT s.starts_on + u.len * g.n AS start) AS p
+ WHERE s.id = $subscription_id                         -- 한 건씩 돈다
+   AND p.start             <  $today + st.open_range_days   -- 오픈 범위 [오늘, 오늘+N) 안에서 시작
+   AND p.start + u.len - 1 >= $today                         -- 이미 끝난 주기는 건너뜀
 ON CONFLICT (source_id, window_start) WHERE source_id IS NOT NULL DO NOTHING;
 ```
 
 - `generate_series(0, period_count - 1)`이라 등록한 주기 수를 넘는 주기는 만들어지지 않는다(AC 3.2.9)
 - `ON CONFLICT ... DO NOTHING`과 부분 유니크 인덱스 `entitlement_period_uidx`로, 배치를 몇 번 돌려도 같은 주기가 두 번 생기지 않는다
-- 월 단위는 같은 모양에서 `p.start`를 `starts_on`에 `n`개월을 더한 날로 바꾼다. 29~31일 시작의 처리가 정해지면 쿼리를 확정한다(Q12)
+- 주기 길이가 고정(7일 · 28일)이고 `subscription_end` CHECK가 `ends_on`을 마지막 주기의 끝으로 맞추므로, 마지막 주기의 `window_end`를 `ends_on`으로 자를 필요가 없다
 
 배치는 생성 대상 월 정액의 id 목록을 뽑은 뒤 **한 건씩 따로 트랜잭션으로** 이 쿼리를 돈다. `ON CONFLICT`가 받아 주는 것은 지정한 유니크 인덱스의 충돌뿐이고, 종류 겹침 EXCLUDE 위반은 그대로 에러가 되어 그 문장 전체가 실패한다(PostgreSQL 문서 INSERT의 conflict_target 설명). 한 문장으로 전체를 돌면 한 건의 위반이 모든 회원의 생성을 막는다. 실패한 건은 로그로 남긴다. 1의 등록 검사가 정상이라면 이 실패는 일어나지 않는다.
 
