@@ -13,6 +13,7 @@
 | PRD · AC | 요구 | 물리 제약 |
 |---|---|---|
 | 2 · AC 1.1.3 | 최초 1회 기록 · 매 요청 갱신 | `first_opened_at`과 `last_used_at`을 분리 |
+| 2 · AC 1.1.5 · 1.1.6 | 페이지가 열릴 때마다 home API에서 검증, 무효면 에러 코드 | `member_link.token_hash` 전역 UNIQUE + `revoked_at IS NULL` 조건 조회 |
 | 2 · AC 3.2.5 | 휴강 슬롯은 표시하지 않음 | `class_slot.canceled_at` soft delete + 부분 인덱스 |
 | ~~2 · AC 2.1.2~~ | ~~월 정액이면 이번 주기 N회 중 M회~~ | 폐기. AC 2.1.5 ~ 2.1.9로 대체 |
 | 2 · AC 2.1.5 · 2.1.8 | 수강권마다 카드, 합산하지 않음 | 응답은 BE-0001 API 5절의 `EntitlementCard` 목록 |
@@ -21,6 +22,12 @@
 | 2 · 열린 질문 (이번 주기 소진) | 고른 날짜의 주기와 잔여를 표시(B안) | 날짜마다 그 날짜를 덮는 수강권의 주기 · 잔여(주기별 수강권은 오픈 범위만큼 미리 있다, PRD-0001 AC 3.2.8). 수업 없는 날짜는 따로 조회 |
 
 DEC-0010(proposed)의 결론이다. 응답 필드는 API 설계에서 정한다.
+
+## 기술 설계 메모
+
+- 회원 API는 토큰을 경로(`/m/{token}/...`)로 받는다([DEC-0008](https://github.com/Fit-link-v2/Fit-link-PRD/blob/main/decisions/0008-react-spa-backend-cookie.md)). 토큰 → 회원 변환은 한 곳(argument resolver 등)에 모으고, 컨트롤러는 토큰 원문 대신 검증된 회원을 받는다. 나중에 토큰을 헤더로 옮겨도 그 한 곳만 고친다
+- 회원 API는 세션 쿠키를 보지 않는다. 강사가 같은 브라우저로 링크를 열면 쿠키가 함께 오기 때문이다
+- 토큰 마스킹(PRD-0002 AC 4.2.2)은 Caddy access log와 에러 리포팅에 한다. Spring access log는 켜지 않는다(BE-ADR-0015). 실제 회원에게 첫 링크를 보내기 전에 켜고, 로그를 직접 열어 확인한다. 로그 수집처를 더하거나 바꿀 때마다 다시 확인한다
 
 ## 열린 질문
 
