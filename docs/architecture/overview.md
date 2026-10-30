@@ -25,7 +25,7 @@ flowchart LR
     db -.->|"하루 여러 번"| s3
 ```
 
-- 브라우저가 `api.`를 직접 호출한다. FE 호스팅은 요청을 중계하지 않는다(DEC-0008)
+- 브라우저가 `api.`를 직접 호출한다. FE 호스팅은 요청을 중계하지 않는다([DEC-0008](https://github.com/Fit-link-v2/Fit-link-PRD/blob/main/decisions/0008-react-spa-backend-cookie.md))
 - 호스팅 · 백업 · 환경은 [BE-ADR-0015](../decisions/0015-hosting-lightsail.md)
 
 ## 모듈

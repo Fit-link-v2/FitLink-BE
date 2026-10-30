@@ -153,7 +153,7 @@ CREATE TABLE setting (
 #### 1-1. 로그인 세션
 
 ```sql
--- 강사 로그인 세션 (DEC-0002). 세션 ID 원본은 쿠키에만 있고 DB에는 해시만 남는다.
+-- 강사 로그인 세션 (DEC-0002 · DEC-0008). 세션 ID 원본은 쿠키에만 있고 DB에는 해시만 남는다.
 CREATE TABLE instructor_session (
   id            bigserial   PRIMARY KEY,
   instructor_id bigint      NOT NULL REFERENCES instructor(id),
@@ -180,7 +180,7 @@ UPDATE instructor_session SET revoked_at = now()
  WHERE session_hash = $hash AND revoked_at IS NULL;
 ```
 
-세션 ID 원본을 저장하지 않는 이유는 `member_link`와 같다. DB가 유출돼도 살아 있는 세션을 가져갈 수 없다([DEC-0002](https://github.com/Fit-link-v2/Fit-link-PRD/blob/main/decisions/0002-instructor-session-cookie.md)).
+세션 ID 원본을 저장하지 않는 이유는 `member_link`와 같다. DB가 유출돼도 살아 있는 세션을 가져갈 수 없다([DEC-0002](https://github.com/Fit-link-v2/Fit-link-PRD/blob/main/decisions/0002-instructor-session-cookie.md), [DEC-0008](https://github.com/Fit-link-v2/Fit-link-PRD/blob/main/decisions/0008-react-spa-backend-cookie.md)).
 
 만료를 요청마다 연장하면 요청마다 쓰기가 한 번 생긴다. 강사 수십 명 규모에서는 문제되지 않는다. 부담이 되면 `last_seen_at`이 일정 시간 이상 지났을 때만 갱신한다. 만료되거나 로그아웃한 행은 주기적으로 지운다. 세션은 이력이 아니라 보안 자료라 BE-ADR-0003(지우지 않는다)의 예외다.
 
