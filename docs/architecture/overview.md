@@ -57,6 +57,8 @@ flowchart LR
 - 쓰기는 Transaction Script다. 서비스 메서드 하나가 트랜잭션 하나이고, 규칙은 SQL 조건과 DB 제약에 둔다. 전술적 DDD(Entity · Aggregate)는 쓰지 않는다
 - SQL은 `infra`의 Repository에만 두고, Repository는 `record`를 주고받는다([BE-ADR-0012](../decisions/0012-jdbc-client.md))
 
+도메인이 아닌 공통 설정(Spring Security 필터 체인 등)은 최상위 `config` 패키지에 둔다. 도메인 모듈은 `config`를 부르지 않는다.
+
 ## 기술 스택
 
 | 항목 | 선택 | 결정 |
