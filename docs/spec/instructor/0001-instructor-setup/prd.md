@@ -1,14 +1,147 @@
 # BE-0001 개발 PRD · 강사 세팅
 
-> 아직 recatch-tdd prd 단계 전이다. [템플릿](../../../templates/prd.md) 형식으로 다시 쓰는 것은 이 기능의 prd 단계에서 한다.
-
 ## 근거
 
 - 제품 PRD: [PRD-0001](https://github.com/Fit-link-v2/Fit-link-PRD/tree/main/prd/0001-instructor-setup)
+- 관련 결정: [DEC-0001](https://github.com/Fit-link-v2/Fit-link-PRD/blob/main/decisions/0001-instructor-kakao-oauth.md) 카카오 로그인 · [DEC-0008](https://github.com/Fit-link-v2/Fit-link-PRD/blob/main/decisions/0008-react-spa-backend-cookie.md) SPA · 쿠키 · 인증 API · [BE-ADR-0008](../../../decisions/0008-session-store.md) 세션 저장소 · [BE-ADR-0014](../../../decisions/0014-kakao-login-direct.md) 카카오 직접 구현 · [BE-ADR-0012](../../../decisions/0012-jdbc-client.md) JdbcClient. 나머지는 `feature.yaml`의 `decisions`
 
-## 기술 설계
+## 1. 개요
 
-### 이 기능이 만드는 범위
+| 구분 | 내용 |
+|---|---|
+| 목적 | 강사가 카카오로 가입 · 로그인하고, 반복 시간표 · 회원 · 링크 · 수강권을 만든다. PRD-0002(회원 화면) · 0003(예약)이 기대는 데이터를 준비한다 |
+| 담당 도메인 | instructor |
+| 참여 도메인 | schedule · membership · entitlement |
+| 범위 밖 | 예약 · 대기(0003 · 0004), 취소 마감(0005), 이벤트 로그. 카카오 외 로그인 수단 |
+
+### 진행 단위
+
+열린 질문이 없는 US 1(가입 · 로그인)을 먼저 끝까지 만든다. US 2 ~ 5는 열린 질문(Q17 · Q23 · 일회성 수업 AC 등)을 정한 뒤 이 문서의 2절에 AC를 더하고 plan에 Phase를 더한다.
+
+| Phase | 제품 User Story | 개발 AC | 상태 |
+|---|---|---|---|
+| 1 | US 1 가입 · 로그인 · 세션 | AC-1 ~ AC-10 | 이 문서에서 확정 |
+| 2 ~ | US 2 시간표 · US 3 회원 · 수강권 · US 4 링크 · US 5 개봉 상태 | 추가 예정 | 3절 설계 초안. 열린 질문 해소 후 AC 작성 |
+
+baseline 동결은 Phase 단위로 한다. Phase 1의 AC-1 ~ AC-10은 plan 승인 뒤 바꾸지 않는다. Phase 2 이후 AC는 번호를 이어서(AC-11 ~) 더하고 그때 다시 baseline을 커밋한다.
+
+```mermaid
+flowchart LR
+    P1["Phase 1<br/>가입 · 로그인 · 세션<br/>instructor"] --> P2["Phase 2 ~<br/>시간표 · 회원 · 수강권 · 링크<br/>schedule · membership · entitlement"]
+    Q["열린 질문<br/>Q17 · Q23 · 일회성 수업 AC"] -.->|해소 후| P2
+```
+
+## 2. 인수 조건
+
+기계용 계약은 [`ac.yml`](ac.yml)이 원본이다. 쿠키 이름은 dev · prod 기준이고 local 프로필은 `__Host-Http-` 접두사를 뺀다(BE-ADR-0014).
+
+### AC-1. 로그인 시작은 state 쿠키를 심고 카카오로 보낸다
+
+근거: PRD-0001 AC 1.1.8, DEC-0008, BE-ADR-0014
+
+- [ ] `GET /auth/kakao`는 302로 카카오 인가 주소(`https://kauth.kakao.com/oauth/authorize`)에 `client_id` · `redirect_uri` · `response_type=code` · `state`를 붙여 보낸다
+- [ ] `state`는 요청마다 새로 만든 난수(32바이트 이상)이고, 같은 값을 `__Host-Http-KAKAO-STATE` 쿠키(`HttpOnly` · `Secure` · `SameSite=Lax` · `Path=/` · `Max-Age=600`)에 담는다
+
+### AC-2. 처음 로그인한 카카오 계정은 그 자리에서 가입된다
+
+근거: PRD-0001 AC 1.2.1 · 1.2.2 · 1.2.4
+
+- [ ] 콜백에서 `state`가 쿠키와 같고 카카오 토큰 교환 · 사용자 조회가 성공하면, 처음 보는 카카오 회원 번호는 `instructor` 1행과 `setting` 1행(`open_range_days` 14)을 한 트랜잭션에서 만든다
+- [ ] 카카오가 닉네임 · 이메일을 주지 않아도 가입한다. `name` · `email`은 `null`로 둔다
+
+### AC-3. 같은 카카오 계정은 다시 가입되지 않는다
+
+근거: PRD-0001 AC 1.2.3
+
+- [ ] 이미 가입한 카카오 회원 번호로 로그인하면 기존 강사로 로그인되고 `instructor` · `setting` 행이 늘지 않는다
+- [ ] 같은 카카오 계정의 콜백 두 개가 동시에 와도 `instructor`는 1행이다(`instructor_identity_uk` + `ON CONFLICT DO NOTHING`)
+
+### AC-4. 로그인 성공은 새 세션을 발급하고 강사 화면으로 보낸다
+
+근거: PRD-0001 AC 1.1.8, DEC-0008, BE-ADR-0008
+
+- [ ] 성공 응답은 302이고 `Location`은 설정의 성공 주소다. 요청 파라미터로 목적지를 받지 않는다(Q30)
+- [ ] 세션 ID는 32바이트 난수이고 `__Host-Http-SESSION` 쿠키(`HttpOnly` · `Secure` · `SameSite=Lax` · `Path=/`)로 준다. DB에는 SHA-256 해시만 저장한다
+- [ ] 로그인할 때마다 새 세션 ID를 만든다. 요청에 이전 세션 쿠키가 있었으면 그 세션은 무효가 된다
+- [ ] `state` 쿠키는 성공 · 실패와 상관없이 콜백 응답에서 지운다
+
+### AC-5. 로그인 실패는 세션 없이 실패 주소로 보낸다
+
+근거: PRD-0001 AC 1.1.5
+
+- [ ] 다음 경우 302로 설정의 실패 주소에 보내고 세션을 만들지 않는다: 카카오가 `error`를 줌(동의 취소 등), `state` 쿠키가 없음, `state`가 다름, 토큰 교환 실패, 사용자 조회 실패
+- [ ] 실패해도 `instructor` · `instructor_session` 행이 생기지 않는다
+
+### AC-6. 로그인 상태는 `GET /me`로 확인한다
+
+근거: PRD-0001 AC 1.1.3, DEC-0008
+
+- [ ] 유효한 세션 쿠키가 있으면 200 `{ "id", "name", "email" }`
+- [ ] 쿠키가 없거나, DB에 없거나, 만료 · 로그아웃된 세션이면 401 `{ "code": "UNAUTHENTICATED" }`. 강사 API 전체에 같은 규칙을 적용한다
+
+### AC-7. 세션은 마지막 요청으로부터 14일 유지된다
+
+근거: PRD-0001 AC 1.1.6
+
+- [ ] 인증된 요청마다 `expires_at`이 그 시각 + 14일로 바뀐다
+- [ ] 마지막 요청 뒤 14일이 지나면 같은 쿠키는 401이다
+
+### AC-8. 로그아웃하면 세션이 즉시 무효가 된다
+
+근거: PRD-0001 AC 1.1.7
+
+- [ ] `POST /auth/logout`은 204를 주고 세션 쿠키를 지운다(`Max-Age=0`). 세션 행은 `revoked_at`이 채워진다
+- [ ] 로그아웃한 쿠키로 다시 요청하면 401이다
+- [ ] 세션 쿠키가 없거나 이미 무효여도 204다
+
+### AC-9. GET이 아닌 요청은 `X-CSRF: 1` 헤더가 있어야 한다
+
+근거: DEC-0008
+
+- [ ] GET · HEAD · OPTIONS가 아닌 요청에 `X-CSRF: 1`이 없으면 403 `{ "code": "CSRF_HEADER_MISSING" }`. 로그아웃도 해당한다
+- [ ] 인증이 필요한 경로는 401이 403보다 먼저다. 로그아웃은 세션 없이 열린 경로라 헤더가 없으면 403이다
+
+### AC-10. 비밀 값은 저장 · 로그에 남지 않는다
+
+근거: DEC-0002, BE-ADR-0014
+
+- [ ] DB에 세션 ID 원본 · 카카오 토큰이 없다(`instructor_session`에 해시 컬럼만, 카카오 토큰 컬럼 없음)
+- [ ] 애플리케이션 로그에 카카오 `code` · 액세스 토큰 · client secret · 세션 ID가 찍히지 않는다
+
+### Phase 1 흐름
+
+```mermaid
+sequenceDiagram
+    participant B as 브라우저
+    participant API as Spring
+    participant K as 카카오
+    participant DB as PostgreSQL
+    B->>API: GET /auth/kakao
+    API-->>B: 302 kauth.kakao.com + KAKAO-STATE 쿠키 (AC-1)
+    B->>K: 로그인 · 동의
+    K-->>B: 302 /auth/kakao/callback?code&state
+    B->>API: GET /auth/kakao/callback
+    alt state 불일치 · error · 카카오 호출 실패
+        API-->>B: 302 실패 주소, state 쿠키 삭제 (AC-5)
+    else 성공
+        API->>K: code → 토큰, 사용자 조회
+        API->>DB: 가입 또는 조회 (AC-2 · AC-3)
+        API->>DB: 이전 세션 무효, 새 세션 해시 저장 (AC-4)
+        API-->>B: 302 성공 주소 + SESSION 쿠키
+    end
+    B->>API: GET /me + SESSION 쿠키
+    API->>DB: 해시로 조회하며 만료 연장 (AC-7)
+    API-->>B: 200 또는 401 (AC-6)
+    B->>API: POST /auth/logout + X-CSRF: 1 (AC-9)
+    API->>DB: revoked_at = now() (AC-8)
+    API-->>B: 204 + 쿠키 삭제
+```
+
+## 3. 기술 설계
+
+### 3.1 데이터 모델
+
+#### 이 기능이 만드는 범위
 
 PRD 1 단계에서 실제로 `CREATE TABLE`하는 것은 이 9개다. `booking` · `waitlist` · `event_log` · `entitlement_adjustment`는 PRD 3 이후에 붙는다.
 
@@ -117,9 +250,9 @@ AC 2.1.1은 `capacity`(정원 상한)를 요구하지만 `taken`(현재 찬 인�
 
 팀원과 공유할 때는 전체 그림과 이 절을 같이 본다. 전체 그림은 "최종적으로 여기로 간다", 이 절은 "이번 단계에 손대는 범위"를 말한다.
 
-### 테이블 정의 (DDL)
+#### 테이블 정의 (DDL)
 
-#### 1. 강사 · 설정
+##### 1. 강사 · 설정
 
 ```sql
 CREATE TABLE instructor (
@@ -150,7 +283,7 @@ CREATE TABLE setting (
 
 `setting`의 PK가 `instructor_id`이므로 강사당 정확히 1행이 강제된다. 가입과 같은 트랜잭션에서 기본값으로 1행을 만든다(PRD 1 AC 1.2.2).
 
-#### 1-1. 로그인 세션
+##### 1-1. 로그인 세션
 
 ```sql
 -- 강사 로그인 세션 (DEC-0002 · DEC-0008). 세션 ID 원본은 쿠키에만 있고 DB에는 해시만 남는다.
@@ -186,7 +319,7 @@ UPDATE instructor_session SET revoked_at = now()
 
 Spring Session JDBC를 쓰지 않고 이 테이블을 직접 만든다([BE-ADR-0008](../../../decisions/0008-session-store.md)). Spring Session JDBC의 기본 스키마는 세션 ID를 원본으로 저장한다.
 
-#### 2. 시간표
+##### 2. 시간표
 
 ```sql
 CREATE TABLE recurrence (
@@ -245,7 +378,7 @@ CREATE INDEX class_slot_owner_open_idx
 
 반복 주기는 매주로 고정돼 있다. 격주 · 월 n번째 주는 PRD 1의 범위 밖이다(인터뷰 7번). 넣게 되면 `recurrence`에 `interval_weeks`와 `anchor_date` 두 컬럼이 붙는다. 기존 행은 각각 1과 생성일로 채우면 되므로 나중에 넣어도 비용이 낮다.
 
-#### 3. 회원 · 링크
+##### 3. 회원 · 링크
 
 ```sql
 CREATE TABLE member (
@@ -282,7 +415,7 @@ CREATE UNIQUE INDEX member_link_active_uidx
 
 재발급은 기존 행에 `revoked_at`을 찍고 새 행을 넣는다. 새 행의 `first_opened_at`은 자연히 NULL이므로 AC 5.1.3의 "재발급하면 초기화"가 별도 로직 없이 성립한다. 죽은 행은 부분 유니크 인덱스의 조건을 만족하지 않아 인덱스에 들어가지 않으므로, 재발급이 쌓여도 조회가 느려지지 않는다.
 
-#### 4. 수강권
+##### 4. 수강권
 
 `entitlement.source_id`가 `subscription`을 가리키므로 `subscription`을 먼저 만든다. 설명은 5절.
 
@@ -337,7 +470,7 @@ CREATE INDEX entitlement_pick_idx ON entitlement (member_id, window_end);
 
 `entitlement_used_range`가 PRD 3 AC 5.2.1의 "0 이상 `max_count` 이하"를 그대로 담는다. 강사의 수기 수정도 이 범위를 벗어날 수 없다.
 
-#### 5. 월 정액
+##### 5. 월 정액
 
 `subscription` 테이블은 4절에 있다. 여기에는 `entitlement`에 거는 인덱스와 제약을 둔다.
 
@@ -368,15 +501,44 @@ ALTER TABLE entitlement ADD CONSTRAINT entitlement_kind_no_overlap
 
 **종류 겹침 검사의 한계.** `entitlement_kind_no_overlap`은 이미 만들어진 행끼리만 비교한다. 월 정액의 뒤쪽 주기는 아직 행이 없으므로, 그 기간에 횟수권을 등록하면 DB가 막지 못하고 나중에 배치의 INSERT가 실패한다. 그래서 등록할 때 애플리케이션이 `subscription.starts_on ~ ends_on` 전체 기간과 비교한다. 제약은 그 검사가 뚫렸을 때의 마지막 방어선이다. 결정 근거는 [BE-ADR-0009](../../../decisions/0009-entitlement-kind-exclusion.md).
 
-### 마이그레이션
+#### AC 대 제약
 
-PRD 단위가 배포 단위는 아니다. 1차 배포에는 PRD 1~3이 함께 나간다.
+인수 조건이 어느 제약으로 내려왔는지의 대응표다. 리뷰는 이 표를 기준으로 하면 된다.
 
-| 마이그레이션 | 내용 | 시점 |
+| PRD · AC | 요구 | 물리 제약 |
 |---|---|---|
-| 001 | btree_gist 확장, instructor, instructor_session, setting(open_range_days), recurrence, class_slot, member, member_link, subscription, entitlement | PRD 1 |
+| (제품 형태) | 강사끼리 데이터가 섞이지 않음 | `member.instructor_id`, `recurrence.instructor_id`, `class_slot.instructor_id`, `setting` PK |
+| 1 · AC 2.1.1 | 정원 1 이상 50 이하 | `recurrence` CHECK capacity BETWEEN 1 AND 50 |
+| 1 · AC 1.1.6 | 세션 2주, 요청마다 연장 | `instructor_session.expires_at` 조건부 UPDATE |
+| 1 · AC 1.1.7 | 로그아웃 즉시 무효 | `instructor_session.revoked_at` |
+| 1 · AC 1.2.2 | 가입 시 설정 1행 | `setting` PK = instructor_id. 가입 트랜잭션에서 INSERT |
+| 1 · AC 1.2.3 | 같은 카카오 계정은 한 번만 가입 | `instructor_identity_uk` (provider, provider_user_id) |
+| 1 · AC 1.3.1 | 강사는 자기 데이터만 | `member.instructor_id`, `recurrence.instructor_id`, `class_slot.instructor_id`. 모든 강사 화면 쿼리에 소유자 조건 |
+| 1 · AC 2.1.3 | 같은 규칙 재저장해도 슬롯 중복 없음 | `class_slot` UNIQUE (recurrence_id, occurs_on) |
+| 1 · AC 2.2.2 | 배치를 여러 번 돌려도 결과 동일 | 위 유니크 + INSERT ... ON CONFLICT DO NOTHING |
+| 1 · AC 2.3.1 | 휴강. 예약이 있으면 확인 창 | `class_slot.canceled_at` + `booking.cancel_reason` (처리는 write-paths 5.2) |
+| 1 · AC 2.3.2 | 예약이 있는 슬롯은 시각 변경 불가 | 조건부 UPDATE `WHERE taken = 0` ([쓰기 경로](../../booking/write-paths.md)) |
+| 1 · AC 2.3.3 | 삭제 · 변경은 해당 슬롯에만 | `recurrence`와 `class_slot`을 분리. 규칙은 안 건드린다 |
+| (일회성 수업, PRD-0001 AC 추가 예정) | 반복 규칙 없이 한 번만 여는 수업 | `class_slot.recurrence_id` NULL 허용. 규칙이 만든 슬롯의 소유자 일치는 복합 FK `class_slot_recurrence_owner_fk` |
+| 1 · AC 2.4.1 | 오픈 범위 7~28일 | `setting` CHECK open_range_days BETWEEN 7 AND 28 |
+| 1 · AC 3.1.2 | 동명이인 허용 | `member.name`에 UNIQUE 없음 (의도적 부재) |
+| 1 · AC 3.2.3 · 3 · AC 5.2.1 | 잔여는 0 이상 max_count 이하 | `entitlement` CHECK used_count 범위 |
+| 1 · AC 3.2.6 | 월 정액 입력값 | `subscription` CHECK period_unit(`WEEK` · `FOUR_WEEKS`) · count_per_period · period_count |
+| (DEC-0011) | 등록 기간은 4주 단위, 종료일은 마지막 주기의 마지막 날 | `subscription_four_week_multiple` · `subscription_end` CHECK |
+| 1 · AC 3.2.8 | 주기별 수강권 자동 생성, 중복 없음 | `entitlement_period_uidx` (source_id, window_start) |
+| 1 · AC 3.2.9 | 마지막 주기 뒤로는 만들지 않음 | 생성 쿼리의 `generate_series(0, period_count - 1)` |
+| 1 · AC 3.2.10 | 다른 종류 기간 겹침 금지 | `entitlement_kind_no_overlap` EXCLUDE + 등록 시 애플리케이션 검사 |
+| 1 · AC 3.2.11 | 같은 종류는 겹쳐도 됨 | 위 EXCLUDE가 `kind WITH <>`라 같은 종류는 비교하지 않음 |
+| 1 · AC 3.3.1 | 수강 종료는 삭제가 아님 | `member.status` ENDED. DELETE 경로 없음 |
+| 1 · AC 4.1.2 | 해시만 저장 | `member_link`에 원본 토큰 컬럼 없음 |
+| 1 · AC 4.3.1 | 재발급 시 이전 링크 무효 | `revoked_at` · member당 유효 링크 1개 부분 유니크 |
+| 1 · AC 4.3.2 | 재발급해도 예약 기록 유지 | `booking.member_id`가 링크가 아닌 회원을 참조 |
+| 1 · AC 5.1.3 | 재발급 시 최초 접속 초기화 | 새 행의 first_opened_at이 NULL. 별도 로직 불필요 |
 
-### API
+"의도적 부재" 세 줄이 리뷰에서 가장 놓치기 쉬운 부분이다. 컬럼이 없는 것이 설계 누락이 아니라 인수 조건이다.
+
+### 3.2 API
+
 
 와이어프레임 I-01 ~ I-13 중 그려진 화면만 다룬다. 관련 열린 질문은 Q18 · Q19 · Q21 ~ Q34.
 
@@ -520,43 +682,85 @@ PRD 단위가 배포 단위는 아니다. 1차 배포에는 PRD 1~3이 함께 �
 | 422 | ENTITLEMENT_OTHER_KIND_ACTIVE | 수강권 등록 | `availableFrom` |
 | 422 | PERIOD_NOT_CURRENT · REMAINING_OUT_OF_RANGE | 잔여 수정 | |
 
-## AC 대 제약
+### 3.3 트랜잭션 · 동시성
 
-인수 조건이 어느 제약으로 내려왔는지의 대응표다. 리뷰는 이 표를 기준으로 하면 된다.
+Phase 1만 적는다. Phase 2 이후는 [예약 쓰기 경로](../../booking/write-paths.md) · [수강권 쓰기 경로](../../entitlement/write-paths.md).
 
-| PRD · AC | 요구 | 물리 제약 |
+#### 요청 처리 구조
+
+```mermaid
+flowchart TD
+    R["요청"] --> S["세션 확인 필터<br/>쿠키 → SHA-256 → 조건부 UPDATE (만료 연장)"]
+    S -->|"1행"| A["현재 강사 id 설정"]
+    S -->|"0행 · 쿠키 없음"| N["익명"]
+    A --> Z{"허용 규칙"}
+    N --> Z
+    Z -->|"그 밖의 경로, 익명"| E401["401 UNAUTHENTICATED"]
+    Z -->|"/auth/** · /actuator/health, 또는 강사"| C{"GET · HEAD · OPTIONS?"}
+    C -->|예| OK["컨트롤러"]
+    C -->|아니오| X{"X-CSRF: 1?"}
+    X -->|있음| OK
+    X -->|없음| E403["403 CSRF_HEADER_MISSING"]
+```
+
+- 세션 확인 필터는 401을 직접 보내지 않는다. 강사를 채우거나 비워 두고, 허용 여부는 Security의 허용 규칙이 정한다
+- CSRF 헤더 검사는 허용 규칙 뒤에 둔다. 그래서 인증이 필요한 경로는 401이 403보다 먼저 나온다(공통 규칙의 판정 순서)
+- 로그인 API(`/auth/**`)는 세션 없이 열려 있다
+
+#### 가입 (AC-2 · AC-3)
+
+한 트랜잭션.
+
+```sql
+INSERT INTO instructor (provider, provider_user_id, name, email)
+VALUES ('KAKAO', $kakaoId, $name, $email)
+ON CONFLICT ON CONSTRAINT instructor_identity_uk DO NOTHING
+RETURNING id;
+-- 1행이면 새 강사: setting 기본값 1행 INSERT
+-- 0행이면 기존 강사: SELECT id FROM instructor WHERE provider = 'KAKAO' AND provider_user_id = $kakaoId
+```
+
+- 동시 콜백 두 개가 같이 INSERT하면 하나만 1행을 받고, 다른 하나는 유니크 인덱스에서 앞 트랜잭션의 커밋을 기다린 뒤 0행을 받는다. 그래서 `setting`도 1행이다
+- 기존 강사의 `name` · `email`은 Phase 1에서 갱신하지 않는다(Q35)
+
+#### 세션 발급 (AC-4)
+
+로그인 트랜잭션 안에서 이전 세션 무효와 새 세션 저장을 같이 한다.
+
+```sql
+UPDATE instructor_session SET revoked_at = now()
+ WHERE session_hash = $oldHash AND revoked_at IS NULL;          -- 요청에 이전 쿠키가 있을 때만
+
+INSERT INTO instructor_session (instructor_id, session_hash, expires_at)
+VALUES ($instructorId, $newHash, now() + interval '14 days');
+```
+
+- 이전 쿠키가 다른 강사의 세션이어도 무효로 한다. 한 브라우저에 세션은 하나다
+- 세션 확인 · 로그아웃 SQL은 3.1의 로그인 세션 절
+
+#### 시각
+
+세션 만료는 SQL의 `now()`로 계산한다(DB 시각). 테스트에서 14일 경과는 `expires_at`을 직접 과거로 바꿔 만든다. `Clock` 주입과 섞지 않는다(BE-ADR-0013 대가 절).
+
+### 3.4 마이그레이션
+
+Phase 단위로 나눠 만든다. 번호는 Flyway 파일 이름 `V{번호}__{설명}.sql`이 된다(BE-ADR-0013).
+
+| 번호 | 내용 | 순서 · 주의 |
 |---|---|---|
-| (제품 형태) | 강사끼리 데이터가 섞이지 않음 | `member.instructor_id`, `recurrence.instructor_id`, `class_slot.instructor_id`, `setting` PK |
-| 1 · AC 2.1.1 | 정원 1 이상 50 이하 | `recurrence` CHECK capacity BETWEEN 1 AND 50 |
-| 1 · AC 1.1.6 | 세션 2주, 요청마다 연장 | `instructor_session.expires_at` 조건부 UPDATE |
-| 1 · AC 1.1.7 | 로그아웃 즉시 무효 | `instructor_session.revoked_at` |
-| 1 · AC 1.2.2 | 가입 시 설정 1행 | `setting` PK = instructor_id. 가입 트랜잭션에서 INSERT |
-| 1 · AC 1.2.3 | 같은 카카오 계정은 한 번만 가입 | `instructor_identity_uk` (provider, provider_user_id) |
-| 1 · AC 1.3.1 | 강사는 자기 데이터만 | `member.instructor_id`, `recurrence.instructor_id`, `class_slot.instructor_id`. 모든 강사 화면 쿼리에 소유자 조건 |
-| 1 · AC 2.1.3 | 같은 규칙 재저장해도 슬롯 중복 없음 | `class_slot` UNIQUE (recurrence_id, occurs_on) |
-| 1 · AC 2.2.2 | 배치를 여러 번 돌려도 결과 동일 | 위 유니크 + INSERT ... ON CONFLICT DO NOTHING |
-| 1 · AC 2.3.1 | 휴강. 예약이 있으면 확인 창 | `class_slot.canceled_at` + `booking.cancel_reason` (처리는 write-paths 5.2) |
-| 1 · AC 2.3.2 | 예약이 있는 슬롯은 시각 변경 불가 | 조건부 UPDATE `WHERE taken = 0` ([쓰기 경로](../../booking/write-paths.md)) |
-| 1 · AC 2.3.3 | 삭제 · 변경은 해당 슬롯에만 | `recurrence`와 `class_slot`을 분리. 규칙은 안 건드린다 |
-| (일회성 수업, PRD-0001 AC 추가 예정) | 반복 규칙 없이 한 번만 여는 수업 | `class_slot.recurrence_id` NULL 허용. 규칙이 만든 슬롯의 소유자 일치는 복합 FK `class_slot_recurrence_owner_fk` |
-| 1 · AC 2.4.1 | 오픈 범위 7~28일 | `setting` CHECK open_range_days BETWEEN 7 AND 28 |
-| 1 · AC 3.1.2 | 동명이인 허용 | `member.name`에 UNIQUE 없음 (의도적 부재) |
-| 1 · AC 3.2.3 · 3 · AC 5.2.1 | 잔여는 0 이상 max_count 이하 | `entitlement` CHECK used_count 범위 |
-| 1 · AC 3.2.6 | 월 정액 입력값 | `subscription` CHECK period_unit(`WEEK` · `FOUR_WEEKS`) · count_per_period · period_count |
-| (DEC-0011) | 등록 기간은 4주 단위, 종료일은 마지막 주기의 마지막 날 | `subscription_four_week_multiple` · `subscription_end` CHECK |
-| 1 · AC 3.2.8 | 주기별 수강권 자동 생성, 중복 없음 | `entitlement_period_uidx` (source_id, window_start) |
-| 1 · AC 3.2.9 | 마지막 주기 뒤로는 만들지 않음 | 생성 쿼리의 `generate_series(0, period_count - 1)` |
-| 1 · AC 3.2.10 | 다른 종류 기간 겹침 금지 | `entitlement_kind_no_overlap` EXCLUDE + 등록 시 애플리케이션 검사 |
-| 1 · AC 3.2.11 | 같은 종류는 겹쳐도 됨 | 위 EXCLUDE가 `kind WITH <>`라 같은 종류는 비교하지 않음 |
-| 1 · AC 3.3.1 | 수강 종료는 삭제가 아님 | `member.status` ENDED. DELETE 경로 없음 |
-| 1 · AC 4.1.2 | 해시만 저장 | `member_link`에 원본 토큰 컬럼 없음 |
-| 1 · AC 4.3.1 | 재발급 시 이전 링크 무효 | `revoked_at` · member당 유효 링크 1개 부분 유니크 |
-| 1 · AC 4.3.2 | 재발급해도 예약 기록 유지 | `booking.member_id`가 링크가 아닌 회원을 참조 |
-| 1 · AC 5.1.3 | 재발급 시 최초 접속 초기화 | 새 행의 first_opened_at이 NULL. 별도 로직 불필요 |
+| 1 | `instructor`, `setting`(`open_range_days`), `instructor_session` | Phase 1 |
+| 2 ~ | `btree_gist` 확장, `recurrence`, `class_slot`, `member`, `member_link`, `subscription`, `entitlement` | Phase 2 이후. 단위는 그 Phase의 plan에서 정한다 |
 
-"의도적 부재" 세 줄이 리뷰에서 가장 놓치기 쉬운 부분이다. 컬럼이 없는 것이 설계 누락이 아니라 인수 조건이다.
+`cancel_deadline_hours`는 기능 0005의 마이그레이션에서 붙는다. 1차 배포에는 PRD 1 ~ 3이 함께 나간다.
 
-## 열린 질문
+## 4. 영향 받는 도메인 문서
+
+- [ ] `../POLICY.md` 규칙 절(Phase 1 머지 때 로그인 · 세션 규칙), 진행 중인 기능 표 상태
+- [ ] `../data-model.md`
+- [ ] 참여 도메인 `POLICY.md` · `data-model.md`(Phase 2 이후)
+- [ ] `docs/architecture/overview.md` 인증 흐름(세션 확인 필터 위치)
+
+## 5. 열린 질문
 
 | # | 질문 | 영향 |
 |---|---|---|
@@ -591,3 +795,6 @@ PRD 단위가 배포 단위는 아니다. 1차 배포에는 PRD 1~3이 함께 �
 | Q32 | 회원 링크 도메인 | `linkUrl`. DEC-0007, DEC-0008 |
 | ~~Q33~~ | ~~반복 규칙과 별개인 일회성 수업(I-03 "한 번만")을 1차에 넣나~~ | **해소.** 1차에 넣는다(FE 합의). `class_slot.instructor_id` 추가 · `recurrence_id` NULL 허용 · 복합 FK로 반영했다. 생성 API는 PRD-0001에 AC가 추가된 뒤 prd 단계에서 정한다 |
 | Q34 | API 절의 규칙 중 PRD에 AC가 없는 것: 규칙 목록 정렬, 오늘 지난 회차 미생성, 슬롯 목록에서 진행 중 수업 제외, 카드 순서 2 ~ 4단계, 두 422가 겹칠 때 OTHER_KIND_ACTIVE 우선, `frontCard` null 조건 | BE가 정한 기본값. FE 확인 후 필요하면 PRD에 AC로 올린다 |
+| Q35 | 기존 강사가 다시 로그인할 때 카카오 닉네임 · 이메일이 바뀌었으면 갱신하나 | Phase 1은 갱신하지 않는다. 화면에 강사 이름을 쓰는 곳이 생기면 정한다 |
+| Q36 | 만료 · 로그아웃된 세션 행을 언제 지우나 | 3.1 로그인 세션 절은 "주기적으로 지운다". 주기와 실행 방법(스케줄러)은 Phase 2의 슬롯 배치와 같이 정한다. Phase 1은 쌓여도 동작에 영향 없다 |
+| Q37 | 이메일 동의를 요청하나 | PRD-0001 AC 1.2.4는 필수 동의로 요청하되 비즈 앱 전환이 막히면 폐기한다. 카카오 앱 콘솔 확인 전이라 Phase 1은 동의 항목 없이 시작하고 `email`은 `null`이다(Q14) |
