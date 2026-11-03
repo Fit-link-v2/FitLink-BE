@@ -6,7 +6,7 @@
 
 | Phase | User Story | AC | 상태 |
 |---|---|---|---|
-| 1 | PRD-0001 US 1 가입 · 로그인 · 세션 | AC-1 ~ AC-10 | 미착수 |
+| 1 | PRD-0001 US 1 가입 · 로그인 · 세션 | AC-1 ~ AC-10 | 진행 중 (1.1 완료) |
 | 2 ~ | US 2 ~ 5 시간표 · 회원 · 수강권 · 링크 | AC-11 ~ (추가 예정) | 열린 질문 해소 후 작성 |
 
 ### Phase 1 구조
@@ -87,9 +87,9 @@ flowchart LR
 
 ### 1.1 스키마 (V1)
 
-- [ ] RED: 실패하는 테스트 — `[BE-0001 AC-3] 같은 provider · provider_user_id 두 번째 INSERT는 instructor_identity_uk 위반`
-- [ ] GREEN: `V1__instructor.sql`에 `instructor` · `setting` · `instructor_session`(prd 3.1 DDL 그대로)
-- [ ] REFACTOR: 공통 테스트 기반 클래스 · TRUNCATE 정리 도입
+- [x] RED: 실패하는 테스트 — `[BE-0001 AC-3] 같은 provider · provider_user_id 두 번째 INSERT는 instructor_identity_uk 위반`
+- [x] GREEN: `V1__instructor.sql`에 `instructor` · `setting` · `instructor_session`(prd 3.1 DDL 그대로)
+- [x] REFACTOR: 공통 테스트 기반 클래스 · TRUNCATE 정리 도입
 
 ### 1.2 가입 또는 조회 (InstructorRepository · LoginService 일부)
 
