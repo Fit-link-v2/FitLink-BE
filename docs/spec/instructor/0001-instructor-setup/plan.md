@@ -6,7 +6,7 @@
 
 | Phase | User Story | AC | 상태 |
 |---|---|---|---|
-| 1 | PRD-0001 US 1 가입 · 로그인 · 세션 | AC-1 ~ AC-10 | 진행 중 (1.5 완료) |
+| 1 | PRD-0001 US 1 가입 · 로그인 · 세션 | AC-1 ~ AC-10 | 진행 중 (1.6 완료) |
 | 2 ~ | US 2 ~ 5 시간표 · 회원 · 수강권 · 링크 | AC-11 ~ (추가 예정) | 열린 질문 해소 후 작성 |
 
 ### Phase 1 구조
@@ -126,13 +126,13 @@ flowchart LR
 
 ### 1.6 로그아웃과 CSRF 헤더
 
-- [ ] RED: `[BE-0001 AC-8] POST /auth/logout은 204, 쿠키 Max-Age=0, 세션 행 revoked_at 채움`
-- [ ] RED: `[BE-0001 AC-8] 로그아웃한 쿠키로 GET /me는 401`
-- [ ] RED: `[BE-0001 AC-8] 쿠키 없이 로그아웃해도 204`
-- [ ] RED: `[BE-0001 AC-9] X-CSRF 헤더 없는 로그아웃은 403 CSRF_HEADER_MISSING이고 세션은 그대로`
-- [ ] RED: `[BE-0001 AC-9] 인증이 필요한 경로에 세션 · 헤더 없이 POST하면 401`
-- [ ] GREEN: `LogoutController`, `CsrfHeaderFilter`(AuthorizationFilter 뒤)
-- [ ] REFACTOR: 쿠키 생성 · 삭제를 한 곳(`AuthCookies`)으로. 이름은 설정값
+- [x] RED: `[BE-0001 AC-8] POST /auth/logout은 204, 쿠키 Max-Age=0, 세션 행 revoked_at 채움`
+- [x] RED: `[BE-0001 AC-8] 로그아웃한 쿠키로 GET /me는 401`
+- [x] RED: `[BE-0001 AC-8] 쿠키 없이 로그아웃해도 204`
+- [x] RED: `[BE-0001 AC-9] X-CSRF 헤더 없는 로그아웃은 403 CSRF_HEADER_MISSING이고 세션은 그대로`
+- [x] RED: `[BE-0001 AC-9] 인증이 필요한 경로에 세션 · 헤더 없이 POST하면 401`
+- [x] GREEN: `LogoutController`, `CsrfHeaderFilter`(AuthorizationFilter 뒤)
+- [x] REFACTOR: 쿠키 생성 · 삭제를 한 곳(`AuthCookies`)으로. 이름은 설정값 — 세션 필터를 Bean으로 바꾸고 서블릿 자동 등록을 끔. `config`는 `SessionService`를 직접 참조하지 않음
 
 ### 1.7 로그인 시작 `GET /auth/kakao`
 
