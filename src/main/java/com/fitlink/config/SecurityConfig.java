@@ -9,7 +9,7 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 
 /**
- * 로그인 · 세션은 직접 구현한다(BE-ADR-0008 · BE-ADR-0014). Spring Security의 폼 로그인 · HTTP Basic ·
+ * 로그인 · 세션은 카카오 로그인과 DB 세션 테이블로 직접 구현한다. Spring Security의 폼 로그인 · HTTP Basic ·
  * HttpSession · 기본 CSRF 토큰은 끄고, 인증되지 않은 요청에는 본문 없이 401만 돌려준다.
  */
 @Configuration(proxyBeanMethods = false)
