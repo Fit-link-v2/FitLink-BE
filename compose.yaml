@@ -1,4 +1,4 @@
-# local 개발용 PostgreSQL. 운영 구성(Caddy · Spring · PostgreSQL)은 배포 때 따로 둔다(BE-ADR-0015)
+# local 개발용 PostgreSQL. 운영 구성(Caddy · Spring · PostgreSQL)은 배포 때 따로 둔다
 services:
   postgres:
     image: postgres:17

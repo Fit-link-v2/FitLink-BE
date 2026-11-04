@@ -3,7 +3,7 @@ package com.fitlink;
 import org.junit.jupiter.api.Test;
 import org.springframework.modulith.core.ApplicationModules;
 
-/** 모듈 사이 순환 · 허용하지 않은 패키지 접근이 생기면 실패한다(BE-ADR-0011). */
+/** 모듈 사이 순환 의존이나, 다른 모듈의 공개하지 않은 패키지에 접근하는 코드가 생기면 실패한다. */
 class ModularityTests {
 
 	static final ApplicationModules modules = ApplicationModules.of(FitlinkApplication.class);
