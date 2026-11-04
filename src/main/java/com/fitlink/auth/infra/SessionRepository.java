@@ -1,4 +1,4 @@
-package com.fitlink.instructor.infra;
+package com.fitlink.auth.infra;
 
 import java.util.Optional;
 import org.springframework.jdbc.core.simple.JdbcClient;

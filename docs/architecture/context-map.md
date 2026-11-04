@@ -56,7 +56,7 @@ flowchart LR
 | 테이블 | 도메인 | 도입 기능 | 역할 |
 |---|---|---|---|
 | instructor | instructor | 0001 | 강사. 카카오 계정 1개당 1행 |
-| instructor_session | instructor | 0001 | 강사 로그인 세션. 세션 ID 해시 |
+| instructor_session | instructor | 0001 | 강사 로그인 세션. 세션 ID 해시. 코드는 `auth` 모듈([BE-ADR-0016](../decisions/0016-auth-module.md)) |
 | setting | instructor | 0001 · 0005 | 강사별 설정. 오픈 범위, 취소 마감 시간 |
 | recurrence | schedule | 0001 | 반복 규칙. 요일 · 시각 · 정원. 매주 고정 |
 | class_slot | schedule | 0001 | 슬롯. 회원이 예약하는 단위 |

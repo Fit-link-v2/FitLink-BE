@@ -1,6 +1,6 @@
-package com.fitlink.instructor.api;
+package com.fitlink.auth.api;
 
-import com.fitlink.instructor.application.SessionService;
+import com.fitlink.auth.application.SessionService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;

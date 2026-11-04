@@ -37,4 +37,4 @@ erDiagram
 |---|---|
 | `instructor` | 0001 |
 | `setting` | 0001 (`cancel_deadline_hours`는 0005) |
-| `instructor_session` | 0001 |
+| `instructor_session` | 0001 (코드는 `auth` 모듈, [BE-ADR-0016](../../decisions/0016-auth-module.md)) |

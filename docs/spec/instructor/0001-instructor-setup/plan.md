@@ -6,7 +6,7 @@
 
 | Phase | User Story | AC | 상태 |
 |---|---|---|---|
-| 1 | PRD-0001 US 1 가입 · 로그인 · 세션 | AC-1 ~ AC-10 | 진행 중 (1.6 완료) |
+| 1 | PRD-0001 US 1 가입 · 로그인 · 세션 | AC-1 ~ AC-10 | 진행 중 (1.6 완료, auth 모듈 분리) |
 | 2 ~ | US 2 ~ 5 시간표 · 회원 · 수강권 · 링크 | AC-11 ~ (추가 예정) | 열린 질문 해소 후 작성 |
 
 ### Phase 1 구조
@@ -17,42 +17,48 @@ flowchart TB
         SC["SecurityConfig<br/>필터 체인 · 허용 규칙"]
         CF["CsrfHeaderFilter<br/>X-CSRF: 1 검사"]
     end
-    subgraph instructor["instructor 모듈"]
-        subgraph api["api"]
+    subgraph auth["auth 모듈"]
+        subgraph aapi["api"]
             AC["KakaoAuthController<br/>GET /auth/kakao · /callback"]
             LC["LogoutController<br/>POST /auth/logout"]
-            MC["MeController<br/>GET /me"]
             SF["SessionAuthenticationFilter<br/>쿠키 → 현재 강사"]
         end
-        subgraph application["application"]
-            LS["LoginService<br/>가입 또는 조회 + 세션 발급"]
+        subgraph aapp["application"]
+            LS["LoginService<br/>카카오 조회 + 가입 요청 + 세션 발급"]
             SS["SessionService<br/>확인 · 연장 · 로그아웃"]
             KP["KakaoOAuthClient (interface)"]
         end
-        subgraph infra["infra"]
-            IR["InstructorRepository<br/>instructor · setting SQL"]
+        subgraph ainfra["infra"]
             SR["SessionRepository<br/>instructor_session SQL"]
             KC["KakaoRestClient<br/>RestClient로 카카오 호출"]
         end
+    end
+    subgraph instructor["instructor 모듈"]
+        MC["MeController<br/>GET /me"]
+        IS["InstructorService<br/>가입 또는 조회 · 프로필"]
+        IR["InstructorRepository<br/>instructor · setting SQL"]
     end
     SC --> SF
     SC --> CF
     AC --> LS
     LC --> SS
-    MC --> SS
     SF --> SS
     LS --> KP
     KC -. 구현 .-> KP
-    LS --> IR
+    LS --> IS
     LS --> SR
     SS --> SR
+    MC --> IS
+    IS --> IR
     IR --> DB[("PostgreSQL")]
     SR --> DB
     KC --> K["카카오 API"]
 ```
 
-- `config`가 `instructor`의 필터를 체인에 끼운다. 방향은 `config → instructor` 한쪽이다(overview 모듈 절)
-- `SessionAuthenticationFilter`는 HTTP를 다루므로 `api`에 둔다. 다른 모듈은 이 필터를 부르지 않는다. 다만 `config`가 끼우려면 공개돼야 하므로 공개 범위는 1.5에서 정한다(Modulith `@NamedInterface` 또는 `config`가 `application`의 팩토리를 부르는 방식)
+- 로그인 · 세션 코드는 `auth` 모듈에 둔다([BE-ADR-0016](../../../decisions/0016-auth-module.md)). 1.1 ~ 1.6은 `instructor`에 만들었다가 1.6 뒤에 옮겼다
+- 의존 방향은 `config → auth → instructor` 한쪽이다. `auth`는 가입할 때 `instructor`의 `application`(`InstructorService.signUpOrFind`)을 부른다
+- `MeController`는 `auth`를 부르지 않는다. 필터가 SecurityContext에 남긴 강사 id를 `@AuthenticationPrincipal Long`으로 받는다
+- `config`가 필터를 끼울 수 있도록 `auth`는 `SessionAuthenticationFilter` 하나만 `@NamedInterface("session-filter")`로 공개한다
 - 카카오 호출은 `application`의 인터페이스(`KakaoOAuthClient`) 뒤에 둔다. 흐름 테스트는 가짜 구현으로 바꿔 끼우고, 실제 HTTP는 1.8에서 따로 검증한다
 
 ### 설정값
@@ -88,10 +94,10 @@ flowchart LR
 ### 1.1 스키마 (V1)
 
 - [x] RED: 실패하는 테스트 — `[BE-0001 AC-3] 같은 provider · provider_user_id 두 번째 INSERT는 instructor_identity_uk 위반`
-- [x] GREEN: `V1__instructor.sql`에 `instructor` · `setting` · `instructor_session`(prd 3.1 DDL 그대로)
+- [x] GREEN: `V1__instructor.sql`에 `instructor` · `setting` · `instructor_session`(prd 3.1 DDL 그대로). auth 모듈 분리 때 `instructor_session`을 `V2__auth_session.sql`로 옮김
 - [x] REFACTOR: 공통 테스트 기반 클래스 · TRUNCATE 정리 도입
 
-### 1.2 가입 또는 조회 (InstructorRepository · LoginService 일부)
+### 1.2 가입 또는 조회 (InstructorRepository · InstructorService)
 
 - [x] RED: `[BE-0001 AC-2] 처음 보는 카카오 번호는 instructor 1행과 setting(open_range_days=14) 1행을 만든다`
 - [x] RED: `[BE-0001 AC-2] 닉네임 · 이메일이 없어도 가입하고 name · email은 null`

@@ -1,4 +1,4 @@
-package com.fitlink.instructor.infra;
+package com.fitlink.auth.infra;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;

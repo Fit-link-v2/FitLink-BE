@@ -12,14 +12,14 @@ import java.util.concurrent.Future;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
-class LoginServiceSignUpTests extends IntegrationTest {
+class InstructorSignUpTests extends IntegrationTest {
 
 	@Autowired
-	LoginService loginService;
+	InstructorService instructors;
 
 	@Test
 	void 처음_보는_카카오_번호는_instructor_1행과_setting_14일_1행을_만든다() {
-		long id = loginService.signUpOrFind(new KakaoUser(1001L, "김강사", "coach@example.com"));
+		long id = instructors.signUpOrFind(new KakaoUser(1001L, "김강사", "coach@example.com"));
 
 		assertThat(count("instructor")).isEqualTo(1);
 		assertThat(jdbc.sql("SELECT provider, provider_user_id, name, email FROM instructor WHERE id = ?")
@@ -36,7 +36,7 @@ class LoginServiceSignUpTests extends IntegrationTest {
 
 	@Test
 	void 닉네임_이메일이_없어도_가입하고_name_email은_null() {
-		long id = loginService.signUpOrFind(new KakaoUser(1001L, null, null));
+		long id = instructors.signUpOrFind(new KakaoUser(1001L, null, null));
 
 		assertThat(jdbc.sql("SELECT name IS NULL AND email IS NULL FROM instructor WHERE id = ?")
 				.param(id)
@@ -48,8 +48,8 @@ class LoginServiceSignUpTests extends IntegrationTest {
 
 	@Test
 	void 같은_번호로_다시_가입_처리하면_같은_id_행_수_그대로() {
-		long first = loginService.signUpOrFind(new KakaoUser(1001L, "김강사", null));
-		long second = loginService.signUpOrFind(new KakaoUser(1001L, "김강사", null));
+		long first = instructors.signUpOrFind(new KakaoUser(1001L, "김강사", null));
+		long second = instructors.signUpOrFind(new KakaoUser(1001L, "김강사", null));
 
 		assertThat(second).isEqualTo(first);
 		assertThat(count("instructor")).isEqualTo(1);
@@ -61,7 +61,7 @@ class LoginServiceSignUpTests extends IntegrationTest {
 		CountDownLatch start = new CountDownLatch(1);
 		Callable<Long> signUp = () -> {
 			start.await();
-			return loginService.signUpOrFind(new KakaoUser(1001L, "김강사", null));
+			return instructors.signUpOrFind(new KakaoUser(1001L, "김강사", null));
 		};
 
 		try (ExecutorService pool = Executors.newFixedThreadPool(2)) {

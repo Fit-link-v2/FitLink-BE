@@ -1,4 +1,4 @@
-package com.fitlink.instructor.infra;
+package com.fitlink.auth.infra;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

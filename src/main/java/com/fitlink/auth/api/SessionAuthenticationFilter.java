@@ -1,6 +1,6 @@
-package com.fitlink.instructor.api;
+package com.fitlink.auth.api;
 
-import com.fitlink.instructor.application.SessionService;
+import com.fitlink.auth.application.SessionService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;

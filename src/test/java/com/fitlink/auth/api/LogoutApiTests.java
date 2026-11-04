@@ -1,4 +1,4 @@
-package com.fitlink.instructor.api;
+package com.fitlink.auth.api;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.allOf;
@@ -10,7 +10,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fitlink.IntegrationTest;
-import com.fitlink.instructor.infra.SessionRepository;
+import com.fitlink.auth.infra.SessionRepository;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
