@@ -26,7 +26,7 @@ public class SessionRepository {
 		return sessionId;
 	}
 
-	// 유효한 세션이면 만료를 14일 뒤로 미루고 강사 id를 돌려준다. 확인과 연장을 한 문장으로 한다(prd 3.3)
+	// 유효한 세션이면 만료를 14일 뒤로 미루고 강사 id를 돌려준다. 확인과 연장을 한 문장으로 해서 그 사이에 로그아웃이 끼어들 수 없다
 	public Optional<Long> touch(String sessionId) {
 		return jdbc.sql("""
 				UPDATE instructor_session

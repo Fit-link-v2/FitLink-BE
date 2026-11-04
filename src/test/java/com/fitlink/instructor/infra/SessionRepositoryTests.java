@@ -25,7 +25,7 @@ class SessionRepositoryTests extends IntegrationTest {
 	}
 
 	@Test
-	void BE_0001_AC_4_발급한_세션_ID는_32바이트_난수이고_DB에는_SHA_256_해시만_저장된다() throws Exception {
+	void 발급한_세션_ID는_32바이트_난수이고_DB에는_SHA_256_해시만_저장된다() throws Exception {
 		String sessionId = sessions.issue(instructorId);
 		String other = sessions.issue(instructorId);
 
@@ -42,7 +42,7 @@ class SessionRepositoryTests extends IntegrationTest {
 	}
 
 	@Test
-	void BE_0001_AC_7_확인하면_expires_at이_now_14일로_연장되고_instructor_id를_돌려준다() {
+	void 확인하면_expires_at이_now_14일로_연장되고_instructor_id를_돌려준다() {
 		String sessionId = sessions.issue(instructorId);
 		jdbc.sql("UPDATE instructor_session SET expires_at = now() + interval '1 day'").update();
 
@@ -57,7 +57,7 @@ class SessionRepositoryTests extends IntegrationTest {
 	}
 
 	@Test
-	void BE_0001_AC_7_expires_at이_지난_세션은_확인_결과가_비어_있다() {
+	void expires_at이_지난_세션은_확인_결과가_비어_있다() {
 		String sessionId = sessions.issue(instructorId);
 		jdbc.sql("UPDATE instructor_session SET expires_at = now() - interval '1 second'").update();
 
@@ -65,7 +65,7 @@ class SessionRepositoryTests extends IntegrationTest {
 	}
 
 	@Test
-	void BE_0001_AC_8_revoke하면_revoked_at이_채워지고_이후_확인_결과가_비어_있다() {
+	void revoke하면_revoked_at이_채워지고_이후_확인_결과가_비어_있다() {
 		String sessionId = sessions.issue(instructorId);
 
 		sessions.revoke(sessionId);

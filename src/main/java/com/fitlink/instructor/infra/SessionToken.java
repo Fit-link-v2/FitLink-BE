@@ -6,7 +6,7 @@ import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.util.Base64;
 
-// 세션 ID는 쿠키에만 있고 DB에는 hash만 남는다(AC-10).
+// 세션 ID는 쿠키에만 있고 DB에는 hash만 남는다. DB가 유출돼도 세션을 가로챌 수 없다.
 // 쿠키 문자열을 그대로 해시하므로 형식이 틀린 값도 에러 없이 "없는 세션"이 된다
 final class SessionToken {
 
