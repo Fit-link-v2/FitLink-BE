@@ -6,7 +6,7 @@
 
 | Phase | User Story | AC | 상태 |
 |---|---|---|---|
-| 1 | PRD-0001 US 1 가입 · 로그인 · 세션 | AC-1 ~ AC-10 | 진행 중 (1.2 완료) |
+| 1 | PRD-0001 US 1 가입 · 로그인 · 세션 | AC-1 ~ AC-10 | 진행 중 (1.3 완료) |
 | 2 ~ | US 2 ~ 5 시간표 · 회원 · 수강권 · 링크 | AC-11 ~ (추가 예정) | 열린 질문 해소 후 작성 |
 
 ### Phase 1 구조
@@ -102,12 +102,12 @@ flowchart LR
 
 ### 1.3 세션 저장소 (SessionRepository)
 
-- [ ] RED: `[BE-0001 AC-4] 발급한 세션 ID는 32바이트 난수이고 DB에는 SHA-256 해시만 저장된다`
-- [ ] RED: `[BE-0001 AC-7] 확인하면 expires_at이 now + 14일로 연장되고 instructor_id를 돌려준다`
-- [ ] RED: `[BE-0001 AC-7] expires_at이 지난 세션은 확인 결과가 비어 있다`
-- [ ] RED: `[BE-0001 AC-8] revoke하면 revoked_at이 채워지고 이후 확인 결과가 비어 있다`
-- [ ] GREEN: prd 3.1 로그인 세션 절의 조건부 UPDATE · revoke SQL
-- [ ] REFACTOR: 해시 계산을 한 곳(`SessionToken`)으로
+- [x] RED: `[BE-0001 AC-4] 발급한 세션 ID는 32바이트 난수이고 DB에는 SHA-256 해시만 저장된다`
+- [x] RED: `[BE-0001 AC-7] 확인하면 expires_at이 now + 14일로 연장되고 instructor_id를 돌려준다`
+- [x] RED: `[BE-0001 AC-7] expires_at이 지난 세션은 확인 결과가 비어 있다`
+- [x] RED: `[BE-0001 AC-8] revoke하면 revoked_at이 채워지고 이후 확인 결과가 비어 있다`
+- [x] GREEN: prd 3.1 로그인 세션 절의 조건부 UPDATE · revoke SQL
+- [x] REFACTOR: 해시 계산을 한 곳(`SessionToken`)으로
 
 ### 1.4 `GET /me` 응답 모양과 401
 
