@@ -6,7 +6,7 @@
 
 | Phase | User Story | AC | 상태 |
 |---|---|---|---|
-| 1 | PRD-0001 US 1 가입 · 로그인 · 세션 | AC-1 ~ AC-10 | 진행 중 (1.3 완료) |
+| 1 | PRD-0001 US 1 가입 · 로그인 · 세션 | AC-1 ~ AC-10 | 진행 중 (1.4 완료) |
 | 2 ~ | US 2 ~ 5 시간표 · 회원 · 수강권 · 링크 | AC-11 ~ (추가 예정) | 열린 질문 해소 후 작성 |
 
 ### Phase 1 구조
@@ -111,10 +111,10 @@ flowchart LR
 
 ### 1.4 `GET /me` 응답 모양과 401
 
-- [ ] RED: `[BE-0001 AC-6] 쿠키 없이 GET /me는 401 { code: UNAUTHENTICATED }`
-- [ ] RED: `[BE-0001 AC-6] DB에 없는 쿠키 값이면 401`
-- [ ] GREEN: Security entry point가 401 본문 `{ "code": "UNAUTHENTICATED", "message": ... }`을 쓴다
-- [ ] REFACTOR: 에러 본문 record(`ErrorResponse(code, message)`)를 공통으로
+- [x] RED: `[BE-0001 AC-6] 쿠키 없이 GET /me는 401 { code: UNAUTHENTICATED }`
+- [x] RED: `[BE-0001 AC-6] DB에 없는 쿠키 값이면 401`
+- [x] GREEN: Security entry point가 401 본문 `{ "code": "UNAUTHENTICATED", "message": ... }`을 쓴다
+- [x] REFACTOR: 에러 본문 record(`ErrorResponse(code, message)`)를 공통으로
 
 ### 1.5 세션 확인 필터와 연장
 
