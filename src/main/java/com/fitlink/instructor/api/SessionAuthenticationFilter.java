@@ -15,7 +15,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import org.springframework.web.util.WebUtils;
 
 /**
- * 세션 쿠키가 유효하면 강사 id를 인증 정보로 채운다. 401은 직접 보내지 않고 Security 허용 규칙이 정한다(prd 3.3).
+ * 세션 쿠키가 유효하면 강사 id를 인증 정보로 채운다. 401은 직접 보내지 않고 Security 허용 규칙이 정한다. 그래야 인증이 필요 없는 경로는 쿠키가 틀려도 그대로 통과한다.
  * {@code config}가 필터 체인에 끼우므로 이 클래스만 공개한다. Bean으로 등록하지 않는다(서블릿 필터로 한 번 더 걸리지 않게).
  */
 @NamedInterface("session-filter")

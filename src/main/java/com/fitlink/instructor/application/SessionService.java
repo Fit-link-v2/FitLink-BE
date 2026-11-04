@@ -13,7 +13,7 @@ public class SessionService {
 		this.sessions = sessions;
 	}
 
-	// 유효한 세션이면 만료를 연장하고 강사 id를 돌려준다(AC-6 · AC-7)
+	// 유효한 세션이면 만료를 14일 뒤로 연장하고 강사 id를 돌려준다
 	public Optional<Long> authenticate(String sessionId) {
 		return sessions.touch(sessionId);
 	}

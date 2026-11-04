@@ -19,7 +19,7 @@ class MeApiTests extends IntegrationTest {
 	SessionRepository sessions;
 
 	@Test
-	void BE_0001_AC_6_쿠키_없이_GET_me는_401_UNAUTHENTICATED() throws Exception {
+	void 쿠키_없이_GET_me는_401_UNAUTHENTICATED() throws Exception {
 		mockMvc.perform(get("/me"))
 			.andExpect(status().isUnauthorized())
 			.andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
@@ -28,14 +28,14 @@ class MeApiTests extends IntegrationTest {
 	}
 
 	@Test
-	void BE_0001_AC_6_DB에_없는_쿠키_값이면_401() throws Exception {
+	void DB에_없는_쿠키_값이면_401() throws Exception {
 		mockMvc.perform(get("/me").cookie(new Cookie("SESSION", "not-a-session")))
 			.andExpect(status().isUnauthorized())
 			.andExpect(jsonPath("$.code").value("UNAUTHENTICATED"));
 	}
 
 	@Test
-	void BE_0001_AC_6_유효한_세션_쿠키로_GET_me는_200_id_name_email() throws Exception {
+	void 유효한_세션_쿠키로_GET_me는_200_id_name_email() throws Exception {
 		long id = instructor("김강사", "coach@example.com");
 		String sessionId = sessions.issue(id);
 
@@ -47,7 +47,7 @@ class MeApiTests extends IntegrationTest {
 	}
 
 	@Test
-	void BE_0001_AC_7_인증된_요청_뒤_expires_at이_요청_시각_14일() throws Exception {
+	void 인증된_요청_뒤_expires_at이_요청_시각_14일() throws Exception {
 		String sessionId = sessions.issue(instructor(null, null));
 		jdbc.sql("UPDATE instructor_session SET expires_at = now() + interval '1 day'").update();
 
@@ -63,7 +63,7 @@ class MeApiTests extends IntegrationTest {
 	}
 
 	@Test
-	void BE_0001_AC_7_만료된_세션_쿠키로_GET_me는_401() throws Exception {
+	void 만료된_세션_쿠키로_GET_me는_401() throws Exception {
 		String sessionId = sessions.issue(instructor(null, null));
 		jdbc.sql("UPDATE instructor_session SET expires_at = now() - interval '1 second'").update();
 
