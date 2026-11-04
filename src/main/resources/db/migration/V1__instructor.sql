@@ -1,6 +1,6 @@
--- BE-0001 Phase 1: 강사 · 설정 · 로그인 세션 (prd.md 3.1)
+-- 강사 가입 · 로그인에 필요한 테이블: 강사, 강사별 설정, 로그인 세션
 
--- 카카오 로그인으로만 가입한다(DEC-0001). 비밀번호 컬럼이 없다.
+-- 카카오 로그인으로만 가입한다. 비밀번호 컬럼이 없다.
 CREATE TABLE instructor (
   id               bigserial   PRIMARY KEY,
   provider         text        NOT NULL CHECK (provider IN ('KAKAO')),
@@ -20,7 +20,7 @@ CREATE TABLE setting (
   updated_at            timestamptz NOT NULL DEFAULT now()
 );
 
--- 세션 ID 원본은 쿠키에만 있고 DB에는 SHA-256 해시만 남는다(DEC-0002 · DEC-0008).
+-- 세션 ID 원본은 쿠키에만 있고 DB에는 SHA-256 해시만 남는다. DB가 유출돼도 세션을 가로챌 수 없다.
 CREATE TABLE instructor_session (
   id            bigserial   PRIMARY KEY,
   instructor_id bigint      NOT NULL REFERENCES instructor(id),

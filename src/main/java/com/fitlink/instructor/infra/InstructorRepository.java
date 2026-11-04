@@ -15,7 +15,7 @@ public class InstructorRepository {
 	}
 
 	// 같은 (provider, provider_user_id)가 있으면 넣지 않고 비어 있는 결과를 돌려준다.
-	// 동시에 들어와도 제약이 한 행만 남긴다(prd 3.3 가입)
+	// 동시에 들어와도 instructor_identity_uk 제약이 한 행만 남긴다
 	public Optional<Long> insertIfAbsent(String provider, String providerUserId, String name, String email) {
 		return jdbc.sql("""
 				INSERT INTO instructor (provider, provider_user_id, name, email)
