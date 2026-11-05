@@ -15,6 +15,7 @@ import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestClientResponseException;
 
 @Component
 class KakaoRestClient implements KakaoOAuthClient {
@@ -52,8 +53,15 @@ class KakaoRestClient implements KakaoOAuthClient {
 			return toKakaoUser(requestUser(requestAccessToken(code)));
 		}
 		catch (RestClientException e) {
-			throw new KakaoLoginException("카카오 토큰 교환 또는 사용자 조회 실패", e);
+			throw new KakaoLoginException("카카오 토큰 교환 또는 사용자 조회 실패: " + reason(e));
 		}
+	}
+
+	private static String reason(RestClientException e) {
+		if (e instanceof RestClientResponseException response) {
+			return "HTTP " + response.getStatusCode().value();
+		}
+		return e.getClass().getSimpleName();
 	}
 
 	private String requestAccessToken(String code) {

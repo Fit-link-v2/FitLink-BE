@@ -10,6 +10,8 @@ import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.util.Base64;
 import java.util.Optional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
@@ -25,6 +27,8 @@ class KakaoAuthController {
 	private static final String AUTHORIZE_URL = "https://kauth.kakao.com/oauth/authorize";
 
 	private static final SecureRandom RANDOM = new SecureRandom();
+
+	private static final Logger log = LoggerFactory.getLogger(KakaoAuthController.class);
 
 	private final AuthCookies cookies;
 
@@ -66,16 +70,26 @@ class KakaoAuthController {
 			@RequestParam(required = false) String state, @RequestParam(required = false) String error,
 			HttpServletRequest request) {
 		// error는 강사가 동의를 취소했거나 카카오가 거절한 경우다
-		if (error != null || code == null || !sameState(state, cookies.state(request))) {
-			return redirect(properties.failureUrl(), cookies.expiredState());
+		if (error != null) {
+			// 누구나 이 주소를 부를 수 있으므로 카카오 에러 코드 형식(영문 소문자 · 밑줄)일 때만 값을 남긴다
+			return fail("카카오가 error를 돌려줌: " + (error.matches("[a-z_]{1,50}") ? error : "형식 밖 값"));
+		}
+		if (code == null || !sameState(state, cookies.state(request))) {
+			return fail("code 없음 또는 state 불일치");
 		}
 		try {
 			String sessionId = login.login(code, cookies.sessionId(request));
 			return redirect(properties.successUrl(), cookies.expiredState(), cookies.session(sessionId));
 		}
 		catch (KakaoLoginException e) {
-			return redirect(properties.failureUrl(), cookies.expiredState());
+			return fail(e.getMessage());
 		}
+	}
+
+	// 원인만 남긴다. code · state · 토큰 값은 로그에 쓰지 않는다
+	private ResponseEntity<Void> fail(String reason) {
+		log.warn("카카오 로그인 실패: {}", reason);
+		return redirect(properties.failureUrl(), cookies.expiredState());
 	}
 
 	// 길이 · 내용에 따라 비교 시간이 달라지지 않게 MessageDigest.isEqual로 비교한다

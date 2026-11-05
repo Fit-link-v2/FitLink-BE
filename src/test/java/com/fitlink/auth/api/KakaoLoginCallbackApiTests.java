@@ -105,7 +105,7 @@ class KakaoLoginCallbackApiTests extends IntegrationTest {
 
 	@Test
 	void 카카오_호출이_실패하면_302_실패_주소() throws Exception {
-		given(kakao.fetchUser("code-2")).willThrow(new KakaoLoginException("카카오 실패", null));
+		given(kakao.fetchUser("code-2")).willThrow(new KakaoLoginException("카카오 실패"));
 
 		MockHttpServletResponse response = perform(callback("code-2", "state-1").cookie(state("state-1")));
 
