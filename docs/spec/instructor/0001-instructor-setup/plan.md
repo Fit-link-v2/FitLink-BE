@@ -6,7 +6,7 @@
 
 | Phase | User Story | AC | 상태 |
 |---|---|---|---|
-| 1 | PRD-0001 US 1 가입 · 로그인 · 세션 | AC-1 ~ AC-10 | 진행 중 (1.9 완료) |
+| 1 | PRD-0001 US 1 가입 · 로그인 · 세션 | AC-1 ~ AC-10 | 진행 중 (1.10 완료, 끝난 뒤 확인 남음) |
 | 2 ~ | US 2 ~ 5 시간표 · 회원 · 수강권 · 링크 | AC-11 ~ (추가 예정) | 열린 질문 해소 후 작성 |
 
 ### Phase 1 구조
@@ -171,10 +171,10 @@ flowchart LR
 
 ### 1.10 비밀값이 로그에 없다
 
-- [ ] RED: `[BE-0001 AC-10] 로그인 · 로그아웃 흐름의 로그 출력에 code · 액세스 토큰 · client secret · 세션 ID 문자열이 없다` (`OutputCaptureExtension`)
-- [ ] RED: `[BE-0001 AC-10] auth_session에 저장된 값은 쿠키 값과 다르고 32바이트다`
-- [ ] GREEN: 걸린 로그 문구 수정
-- [ ] REFACTOR: 문서 doc-sync 준비(prd 4절 목록)
+- [x] RED: `[BE-0001 AC-10] 로그인 · 재로그인 · 인증 · 로그아웃 흐름의 로그에 code · client secret · 세션 ID가 없다`, `카카오가 실패하고 에러 본문에 code · 토큰을 실어 보내도 로그에 없다` (`OutputCaptureExtension`, 우리 코드와 Spring 웹 · 보안 · JDBC logger를 TRACE로 낮춰 실행. 카카오 실패는 실제 `KakaoRestClient`를 가짜 카카오 서버에 붙임)
+- [x] RED: `[BE-0001 AC-10] 세션 테이블에는 세션 ID 원본 컬럼이 없고 어느 테이블에도 카카오 토큰 컬럼이 없다`. 저장값이 쿠키 값의 SHA-256(32바이트)인 것은 1.3 · 1.9 테스트가 이미 확인
+- [x] GREEN: 우리 코드의 로그는 걸리지 않았다. Spring logger 4개가 DEBUG · TRACE에서 code(요청 주소 · 컨트롤러 인자)와 client secret(카카오로 보내는 form)을 찍어 `application.properties`에서 INFO로 고정 — 상위 패키지 수준을 낮춰도 따라 내려가지 않는다. 4줄 각각 지우면 테스트가 실패하는 것 확인. MockMvc 테스트에 없는 Tomcat 요청 원문 logger(`Http11InputBuffer`)도 같이 고정. 목록 방식이라 운영에서 프레임워크 전체를 DEBUG로 내리지 않는다는 규칙을 설정 주석 · `overview.md`에 둠
+- [x] REFACTOR: doc-sync — 기능 상태 in-progress, 강사 `POLICY.md` 규칙 절(가입 · 로그인 · 세션), `overview.md` 인증 흐름. `data-model.md`는 auth 모듈 분리 때 반영됨
 
 ## Phase 1 끝난 뒤 확인
 
