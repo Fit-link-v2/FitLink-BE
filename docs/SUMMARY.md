@@ -6,7 +6,7 @@
 
 | 도메인 | 테이블 | 문서 |
 |---|---|---|
-| instructor | instructor · setting · instructor_session | [POLICY](spec/instructor/POLICY.md) · [데이터 모델](spec/instructor/data-model.md) |
+| instructor | instructor · setting · auth_session | [POLICY](spec/instructor/POLICY.md) · [데이터 모델](spec/instructor/data-model.md) |
 | schedule | recurrence · class_slot | [POLICY](spec/schedule/POLICY.md) · [데이터 모델](spec/schedule/data-model.md) |
 | membership | member · member_link | [POLICY](spec/membership/POLICY.md) · [데이터 모델](spec/membership/data-model.md) |
 | entitlement | entitlement · subscription · entitlement_adjustment | [POLICY](spec/entitlement/POLICY.md) · [데이터 모델](spec/entitlement/data-model.md) · [쓰기 경로](spec/entitlement/write-paths.md) |
