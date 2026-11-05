@@ -94,7 +94,7 @@ flowchart LR
 ### 1.1 스키마 (V1)
 
 - [x] RED: 실패하는 테스트 — `[BE-0001 AC-3] 같은 provider · provider_user_id 두 번째 INSERT는 instructor_identity_uk 위반`
-- [x] GREEN: `V1__instructor.sql`에 `instructor` · `setting` · `auth_session`(prd 3.1 DDL 그대로). auth 모듈 분리 때 `auth_session`을 `V2__auth_session.sql`로 옮김
+- [x] GREEN: `V1__instructor.sql`에 `instructor` · `setting` · `instructor_session`(prd 3.1 DDL 그대로). auth 모듈 분리 때 세션 테이블을 `V2__auth_session.sql`로 옮기고 이름을 `auth_session`으로 바꿈
 - [x] REFACTOR: 공통 테스트 기반 클래스 · TRUNCATE 정리 도입
 
 ### 1.2 가입 또는 조회 (InstructorRepository · InstructorService)
