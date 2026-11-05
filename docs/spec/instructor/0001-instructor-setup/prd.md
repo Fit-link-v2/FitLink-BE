@@ -748,8 +748,9 @@ Phase 단위로 나눠 만든다. 번호는 Flyway 파일 이름 `V{번호}__{�
 
 | 번호 | 내용 | 순서 · 주의 |
 |---|---|---|
-| 1 | `instructor`, `setting`(`open_range_days`), `auth_session` | Phase 1 |
-| 2 ~ | `btree_gist` 확장, `recurrence`, `class_slot`, `member`, `member_link`, `subscription`, `entitlement` | Phase 2 이후. 단위는 그 Phase의 plan에서 정한다 |
+| 1 | `instructor`, `setting`(`open_range_days`) | Phase 1 |
+| 2 | `auth_session` | Phase 1. 로그인 · 세션은 `auth` 모듈이라 파일을 나눴다(BE-ADR-0016) |
+| 3 ~ | `btree_gist` 확장, `recurrence`, `class_slot`, `member`, `member_link`, `subscription`, `entitlement` | Phase 2 이후. 단위는 그 Phase의 plan에서 정한다 |
 
 `cancel_deadline_hours`는 기능 0005의 마이그레이션에서 붙는다. 1차 배포에는 PRD 1 ~ 3이 함께 나간다.
 
