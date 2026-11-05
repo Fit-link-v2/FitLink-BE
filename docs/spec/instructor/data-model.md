@@ -7,7 +7,7 @@
 ```mermaid
 erDiagram
     INSTRUCTOR ||--|| SETTING : "자기 설정"
-    INSTRUCTOR ||--o{ INSTRUCTOR_SESSION : "로그인 세션"
+    INSTRUCTOR ||--o{ AUTH_SESSION : "로그인 세션"
     INSTRUCTOR {
         bigint id PK
         text provider "KAKAO"
@@ -20,7 +20,7 @@ erDiagram
         int open_range_days "기본 14"
         int cancel_deadline_hours "기본 3 · 0005"
     }
-    INSTRUCTOR_SESSION {
+    AUTH_SESSION {
         bigint id PK
         bigint instructor_id FK
         bytea session_hash UK "sha256 32B"
@@ -37,4 +37,4 @@ erDiagram
 |---|---|
 | `instructor` | 0001 |
 | `setting` | 0001 (`cancel_deadline_hours`는 0005) |
-| `instructor_session` | 0001 (코드는 `auth` 모듈, [BE-ADR-0016](../../decisions/0016-auth-module.md)) |
+| `auth_session` | 0001 (코드는 `auth` 모듈, [BE-ADR-0016](../../decisions/0016-auth-module.md)) |

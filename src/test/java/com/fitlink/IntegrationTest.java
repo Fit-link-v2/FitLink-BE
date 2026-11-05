@@ -24,7 +24,7 @@ public abstract class IntegrationTest {
 	// 동시성 테스트는 @Transactional 롤백과 맞지 않아 매 테스트 전에 비운다
 	@BeforeEach
 	void truncateTables() {
-		jdbc.sql("TRUNCATE instructor, setting, instructor_session RESTART IDENTITY CASCADE").update();
+		jdbc.sql("TRUNCATE instructor, setting, auth_session RESTART IDENTITY CASCADE").update();
 	}
 
 }

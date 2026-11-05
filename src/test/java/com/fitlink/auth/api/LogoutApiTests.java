@@ -39,7 +39,7 @@ class LogoutApiTests extends IntegrationTest {
 			.andExpect(header().string(HttpHeaders.SET_COOKIE, allOf(containsString("SESSION="),
 					containsString("Max-Age=0"), containsString("Path=/"), containsString("HttpOnly"))));
 
-		assertThat(jdbc.sql("SELECT revoked_at IS NOT NULL FROM instructor_session").query(Boolean.class).single())
+		assertThat(jdbc.sql("SELECT revoked_at IS NOT NULL FROM auth_session").query(Boolean.class).single())
 			.isTrue();
 	}
 
@@ -63,7 +63,7 @@ class LogoutApiTests extends IntegrationTest {
 			.andExpect(status().isForbidden())
 			.andExpect(jsonPath("$.code").value("CSRF_HEADER_MISSING"));
 
-		assertThat(jdbc.sql("SELECT revoked_at IS NULL FROM instructor_session").query(Boolean.class).single())
+		assertThat(jdbc.sql("SELECT revoked_at IS NULL FROM auth_session").query(Boolean.class).single())
 			.isTrue();
 	}
 
