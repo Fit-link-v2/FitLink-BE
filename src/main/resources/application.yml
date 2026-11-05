@@ -1,0 +1,45 @@
+spring:
+  application:
+    name: fitlink-be
+  # local은 레포 루트의 .env(git 제외)를 환경변수처럼 읽는다
+  config:
+    import: optional:file:.env[.properties]
+
+server:
+  # 앞단 Caddy(reverse proxy)가 넘기는 X-Forwarded-* 헤더로 원래 요청의 https · 호스트를 알아낸다
+  forward-headers-strategy: framework
+
+management:
+  endpoints:
+    web:
+      exposure:
+        # 상태 확인용 health만 연다
+        include: health
+
+fitlink:
+  auth:
+    cookie:
+      # 로그인 세션 쿠키 이름. https 환경(dev · prod)은 __Host-Http-SESSION으로 바꿔 다른 서브도메인이 덮어쓰지 못하게 한다
+      session: SESSION
+      # 카카오 로그인 중 state를 담는 쿠키. https 환경은 __Host-Http-KAKAO-STATE
+      state: KAKAO-STATE
+    # 카카오 앱 키는 코드 · 설정 파일에 두지 않고 환경변수로만 받는다. local은 위 spring.config.import의 .env에서 읽는다
+    kakao:
+      client-id: ${KAKAO_CLIENT_ID}
+      client-secret: ${KAKAO_CLIENT_SECRET}
+      redirect-uri: http://localhost:8080/auth/kakao/callback
+    # 로그인을 마치면 보내는 강사 화면 주소. 요청 파라미터로 바꿀 수 없다(다른 사이트로 보내는 open redirect 방지)
+    success-url: http://localhost:5173/
+    failure-url: http://localhost:5173/?login=failed
+
+# 아래 logger는 DEBUG · TRACE에서 카카오 code(요청 주소 · 컨트롤러 인자), client secret(카카오로 보내는 form),
+# SESSION 쿠키(Tomcat이 받은 요청 원문)를 그대로 찍는다. 상위 패키지 수준을 낮춰도 이 logger들은 INFO에 머문다.
+# 알려진 logger만 막는 목록이라 운영에서 root나 org.apache · org.springframework 전체를 DEBUG로 내리지 않는다.
+# 같은 이유로 spring.mvc.log-request-details(요청 파라미터 · 헤더 기록)를 켜지 않는다
+logging:
+  level:
+    org.springframework.security.web.FilterChainProxy: INFO
+    org.springframework.security.web.access.intercept.RequestMatcherDelegatingAuthorizationManager: INFO
+    org.springframework.web.method.HandlerMethod: INFO
+    org.springframework.web.client.DefaultRestClient: INFO
+    org.apache.coyote.http11.Http11InputBuffer: INFO
