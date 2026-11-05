@@ -2,10 +2,12 @@ package com.fitlink.auth.api;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.then;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fitlink.IntegrationTest;
+import com.fitlink.auth.application.KakaoLoginException;
 import com.fitlink.instructor.application.KakaoUser;
 import jakarta.servlet.http.Cookie;
 import java.nio.charset.StandardCharsets;
@@ -20,6 +22,8 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 class KakaoLoginCallbackApiTests extends IntegrationTest {
 
 	static final String SUCCESS_URL = "http://localhost:5173/";
+
+	static final String FAILURE_URL = "http://localhost:5173/?login=failed";
 
 	@BeforeEach
 	void 카카오가_돌려줄_사용자() {
@@ -70,6 +74,50 @@ class KakaoLoginCallbackApiTests extends IntegrationTest {
 				.query(Boolean.class)
 				.single())
 			.isTrue();
+	}
+
+	@Test
+	void 카카오가_error를_주면_302_실패_주소이고_세션_강사_행이_없다() throws Exception {
+		MockHttpServletResponse response = perform(get("/auth/kakao/callback").param("error", "access_denied")
+			.param("state", "state-1")
+			.cookie(state("state-1")));
+
+		assertFailed(response);
+		then(kakao).shouldHaveNoInteractions();
+	}
+
+	@Test
+	void KAKAO_STATE_쿠키가_없으면_302_실패_주소() throws Exception {
+		MockHttpServletResponse response = perform(callback("code-1", "state-1"));
+
+		assertFailed(response);
+		then(kakao).shouldHaveNoInteractions();
+	}
+
+	@Test
+	void state가_쿠키와_다르면_302_실패_주소() throws Exception {
+		MockHttpServletResponse response = perform(callback("code-1", "state-1").cookie(state("other")));
+
+		assertFailed(response);
+		then(kakao).shouldHaveNoInteractions();
+	}
+
+	@Test
+	void 카카오_호출이_실패하면_302_실패_주소() throws Exception {
+		given(kakao.fetchUser("code-2")).willThrow(new KakaoLoginException("카카오 실패", null));
+
+		MockHttpServletResponse response = perform(callback("code-2", "state-1").cookie(state("state-1")));
+
+		assertFailed(response);
+	}
+
+	// SESSION 쿠키 없음, 강사 · 세션 행 없음, state 쿠키는 지움
+	private void assertFailed(MockHttpServletResponse response) {
+		assertThat(response.getHeader(HttpHeaders.LOCATION)).isEqualTo(FAILURE_URL);
+		assertThat(response.getHeaders(HttpHeaders.SET_COOKIE)).noneMatch(c -> c.startsWith("SESSION="));
+		assertThat(setCookie(response, "KAKAO-STATE")).contains("Max-Age=0");
+		assertThat(jdbc.sql("SELECT count(*) FROM instructor").query(Long.class).single()).isZero();
+		assertThat(jdbc.sql("SELECT count(*) FROM auth_session").query(Long.class).single()).isZero();
 	}
 
 	private static MockHttpServletRequestBuilder callback(String code, String state) {

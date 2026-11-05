@@ -1,6 +1,7 @@
 package com.fitlink.auth.api;
 
 import com.fitlink.auth.AuthProperties;
+import com.fitlink.auth.application.KakaoLoginException;
 import com.fitlink.auth.application.LoginService;
 import jakarta.servlet.http.HttpServletRequest;
 import java.net.URI;
@@ -62,12 +63,19 @@ class KakaoAuthController {
 	// state 쿠키는 결과와 상관없이 지운다. 한 번 쓴 state를 다시 쓰지 못하게 한다
 	@GetMapping("/auth/kakao/callback")
 	ResponseEntity<Void> callback(@RequestParam(required = false) String code,
-			@RequestParam(required = false) String state, HttpServletRequest request) {
-		if (code == null || !sameState(state, cookies.state(request))) {
+			@RequestParam(required = false) String state, @RequestParam(required = false) String error,
+			HttpServletRequest request) {
+		// error는 강사가 동의를 취소했거나 카카오가 거절한 경우다
+		if (error != null || code == null || !sameState(state, cookies.state(request))) {
 			return redirect(properties.failureUrl(), cookies.expiredState());
 		}
-		String sessionId = login.login(code, cookies.sessionId(request));
-		return redirect(properties.successUrl(), cookies.expiredState(), cookies.session(sessionId));
+		try {
+			String sessionId = login.login(code, cookies.sessionId(request));
+			return redirect(properties.successUrl(), cookies.expiredState(), cookies.session(sessionId));
+		}
+		catch (KakaoLoginException e) {
+			return redirect(properties.failureUrl(), cookies.expiredState());
+		}
 	}
 
 	// 길이 · 내용에 따라 비교 시간이 달라지지 않게 MessageDigest.isEqual로 비교한다
