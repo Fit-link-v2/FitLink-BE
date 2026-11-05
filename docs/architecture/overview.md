@@ -60,6 +60,25 @@ flowchart LR
 
 도메인이 아닌 공통 설정(Spring Security 필터 체인 등)은 최상위 `config` 패키지에 둔다. 도메인 모듈은 `config`를 부르지 않는다.
 
+### 인증 흐름
+
+```mermaid
+flowchart LR
+    req["요청<br/>SESSION 쿠키"] --> chain["Security 필터 체인<br/>config.SecurityConfig"]
+    chain --> filter["세션 확인 필터<br/>auth.api.SessionAuthenticationFilter"]
+    filter -->|"유효: 만료 14일 연장<br/>쿠키 다시 발급"| ctx["SecurityContext<br/>강사 id"]
+    filter -->|"없음 · 만료 · 로그아웃"| anon["익명"]
+    ctx --> csrf["X-CSRF 헤더 검사<br/>GET · HEAD · OPTIONS 제외"]
+    anon -->|"인증 필요 경로"| e401["401 UNAUTHENTICATED"]
+    anon -->|"열린 경로"| csrf
+    csrf --> ctrl["Controller<br/>@AuthenticationPrincipal Long"]
+```
+
+- 세션 확인 필터는 `auth` 모듈에 있고, `config`가 Security 필터 체인의 익명 인증 필터 앞에 끼운다([BE-ADR-0016](../decisions/0016-auth-module.md))
+- 도메인 모듈은 `auth`를 부르지 않는다. 필터가 SecurityContext에 남긴 강사 id를 Controller 인자로 받는다
+- 열린 경로는 `/actuator/health`, `GET /auth/kakao`, `GET /auth/kakao/callback`, `POST /auth/logout`뿐이다
+- 요청 주소 · 컨트롤러 인자 · 카카오로 보내는 form · 요청 원문을 찍는 Spring · Tomcat logger는 `application.properties`에서 INFO로 고정한다. 알려진 logger만 막는 목록이므로 운영에서 root나 프레임워크 패키지 전체를 DEBUG로 내리지 않고, `spring.mvc.log-request-details`를 켜지 않는다
+
 ## 기술 스택
 
 | 항목 | 선택 | 결정 |
