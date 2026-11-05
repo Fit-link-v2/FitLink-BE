@@ -6,5 +6,5 @@ tables:
     introduced-in: "0001"
   - name: setting
     introduced-in: "0001"
-  - name: instructor_session
+  - name: auth_session
     introduced-in: "0001"

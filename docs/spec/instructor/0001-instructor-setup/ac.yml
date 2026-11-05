@@ -45,7 +45,7 @@ criteria:
     description: "로그인 성공은 새 세션을 발급하고 설정의 성공 주소로 보낸다"
     type: security
     layers: [schema, api, test]
-    assertion: "콜백 성공 → 302, Location은 설정값(요청 파라미터와 무관). SESSION 쿠키가 HttpOnly · Secure · SameSite=Lax · Path=/로 오고, instructor_session에 그 값의 SHA-256 해시 행이 있다. 이전 SESSION 쿠키를 들고 로그인하면 새 쿠키 값은 이전과 다르고 이전 세션 행은 revoked_at이 채워진다. 응답은 KAKAO-STATE 쿠키를 Max-Age=0으로 지운다"
+    assertion: "콜백 성공 → 302, Location은 설정값(요청 파라미터와 무관). SESSION 쿠키가 HttpOnly · Secure · SameSite=Lax · Path=/로 오고, auth_session에 그 값의 SHA-256 해시 행이 있다. 이전 SESSION 쿠키를 들고 로그인하면 새 쿠키 값은 이전과 다르고 이전 세션 행은 revoked_at이 채워진다. 응답은 KAKAO-STATE 쿠키를 Max-Age=0으로 지운다"
     priority: must
     verify: machine
     status: active
@@ -55,7 +55,7 @@ criteria:
     description: "로그인 실패는 세션 없이 실패 주소로 보낸다"
     type: behavior
     layers: [api, test]
-    assertion: "콜백에 error 파라미터가 있거나, KAKAO-STATE 쿠키가 없거나, state가 다르거나, 카카오 토큰 교환 · 사용자 조회가 실패하면 302로 설정의 실패 주소에 간다. SESSION 쿠키가 없고 instructor · instructor_session 행이 늘지 않는다. KAKAO-STATE 쿠키는 지운다"
+    assertion: "콜백에 error 파라미터가 있거나, KAKAO-STATE 쿠키가 없거나, state가 다르거나, 카카오 토큰 교환 · 사용자 조회가 실패하면 302로 설정의 실패 주소에 간다. SESSION 쿠키가 없고 instructor · auth_session 행이 늘지 않는다. KAKAO-STATE 쿠키는 지운다"
     priority: must
     verify: machine
     status: active
@@ -105,7 +105,7 @@ criteria:
     description: "세션 ID · 카카오 code · 토큰 · secret은 DB와 로그에 남지 않는다"
     type: security
     layers: [schema, test]
-    assertion: "instructor_session에 세션 원본 컬럼이 없고 저장된 값이 쿠키 값과 다르다(해시). 로그인 흐름 테스트 중 출력된 로그에 테스트용 code · 액세스 토큰 · client secret · 세션 ID 문자열이 없다"
+    assertion: "auth_session에 세션 원본 컬럼이 없고 저장된 값이 쿠키 값과 다르다(해시). 로그인 흐름 테스트 중 출력된 로그에 테스트용 code · 액세스 토큰 · client secret · 세션 ID 문자열이 없다"
     priority: must
     verify: machine
     status: active

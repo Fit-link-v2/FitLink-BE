@@ -29,7 +29,7 @@ flowchart TB
             KP["KakaoOAuthClient (interface)"]
         end
         subgraph ainfra["infra"]
-            SR["SessionRepository<br/>instructor_session SQL"]
+            SR["SessionRepository<br/>auth_session SQL"]
             KC["KakaoRestClient<br/>RestClient로 카카오 호출"]
         end
     end
@@ -94,7 +94,7 @@ flowchart LR
 ### 1.1 스키마 (V1)
 
 - [x] RED: 실패하는 테스트 — `[BE-0001 AC-3] 같은 provider · provider_user_id 두 번째 INSERT는 instructor_identity_uk 위반`
-- [x] GREEN: `V1__instructor.sql`에 `instructor` · `setting` · `instructor_session`(prd 3.1 DDL 그대로). auth 모듈 분리 때 `instructor_session`을 `V2__auth_session.sql`로 옮김
+- [x] GREEN: `V1__instructor.sql`에 `instructor` · `setting` · `auth_session`(prd 3.1 DDL 그대로). auth 모듈 분리 때 `auth_session`을 `V2__auth_session.sql`로 옮김
 - [x] REFACTOR: 공통 테스트 기반 클래스 · TRUNCATE 정리 도입
 
 ### 1.2 가입 또는 조회 (InstructorRepository · InstructorService)
@@ -170,7 +170,7 @@ flowchart LR
 ### 1.10 비밀값이 로그에 없다
 
 - [ ] RED: `[BE-0001 AC-10] 로그인 · 로그아웃 흐름의 로그 출력에 code · 액세스 토큰 · client secret · 세션 ID 문자열이 없다` (`OutputCaptureExtension`)
-- [ ] RED: `[BE-0001 AC-10] instructor_session에 저장된 값은 쿠키 값과 다르고 32바이트다`
+- [ ] RED: `[BE-0001 AC-10] auth_session에 저장된 값은 쿠키 값과 다르고 32바이트다`
 - [ ] GREEN: 걸린 로그 문구 수정
 - [ ] REFACTOR: 문서 doc-sync 준비(prd 4절 목록)
 

@@ -35,7 +35,7 @@ flowchart LR
 | 모듈 | 테이블 | 의존하는 모듈 |
 |---|---|---|
 | instructor | instructor · setting | 없음 |
-| auth | instructor_session | instructor |
+| auth | auth_session | instructor |
 | schedule | recurrence · class_slot | instructor |
 | membership | member · member_link | instructor |
 | entitlement | entitlement · subscription · entitlement_adjustment | membership |
@@ -70,7 +70,7 @@ flowchart LR
 | 스키마 | Flyway | [BE-ADR-0013](../decisions/0013-stack-and-testing.md) |
 | DB | PostgreSQL. `btree_gist` 확장 | [BE-ADR-0009](../decisions/0009-entitlement-kind-exclusion.md) |
 | 로그인 | 카카오 직접 구현(OAuth2 Client 미사용) | [BE-ADR-0014](../decisions/0014-kakao-login-direct.md) |
-| 세션 | 직접 만든 `instructor_session`, 세션 ID 해시 저장. `auth` 모듈 | [BE-ADR-0008](../decisions/0008-session-store.md) · [BE-ADR-0016](../decisions/0016-auth-module.md) |
+| 세션 | 직접 만든 `auth_session`, 세션 ID 해시 저장. `auth` 모듈 | [BE-ADR-0008](../decisions/0008-session-store.md) · [BE-ADR-0016](../decisions/0016-auth-module.md) |
 | 테스트 | JUnit 5 · AssertJ · Testcontainers(PostgreSQL) · MockMvc, `Clock` 주입 | [BE-ADR-0013](../decisions/0013-stack-and-testing.md) |
 | 데이터 클래스 | Java `record`. Lombok 미사용 | [BE-ADR-0013](../decisions/0013-stack-and-testing.md) |
 | 호스팅 | AWS Lightsail 1대, Docker Compose(Caddy · Spring · PostgreSQL) | [BE-ADR-0015](../decisions/0015-hosting-lightsail.md) |

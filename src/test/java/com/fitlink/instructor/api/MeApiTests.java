@@ -49,13 +49,13 @@ class MeApiTests extends IntegrationTest {
 	@Test
 	void 인증된_요청_뒤_expires_at이_요청_시각_14일() throws Exception {
 		String sessionId = sessions.issue(instructor(null, null));
-		jdbc.sql("UPDATE instructor_session SET expires_at = now() + interval '1 day'").update();
+		jdbc.sql("UPDATE auth_session SET expires_at = now() + interval '1 day'").update();
 
 		mockMvc.perform(get("/me").cookie(new Cookie("SESSION", sessionId))).andExpect(status().isOk());
 
 		assertThat(jdbc.sql("""
 				SELECT abs(extract(epoch FROM expires_at - (now() + interval '14 days'))) < 60
-				FROM instructor_session
+				FROM auth_session
 				""")
 				.query(Boolean.class)
 				.single())
@@ -65,7 +65,7 @@ class MeApiTests extends IntegrationTest {
 	@Test
 	void 만료된_세션_쿠키로_GET_me는_401() throws Exception {
 		String sessionId = sessions.issue(instructor(null, null));
-		jdbc.sql("UPDATE instructor_session SET expires_at = now() - interval '1 second'").update();
+		jdbc.sql("UPDATE auth_session SET expires_at = now() - interval '1 second'").update();
 
 		mockMvc.perform(get("/me").cookie(new Cookie("SESSION", sessionId)))
 			.andExpect(status().isUnauthorized())
