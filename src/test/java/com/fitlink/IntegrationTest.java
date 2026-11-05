@@ -11,7 +11,7 @@ import org.springframework.test.web.servlet.MockMvc;
 // DB가 닿는 테스트의 공통 기반. 설정이 같아야 Spring 컨텍스트 · 컨테이너를 재사용하므로
 // 클래스마다 설정을 더하지 않고 여기서만 바꾼다
 @Import(TestcontainersConfiguration.class)
-@SpringBootTest
+@SpringBootTest(properties = "KAKAO_CLIENT_ID=test-client-id")
 @AutoConfigureMockMvc
 public abstract class IntegrationTest {
 
