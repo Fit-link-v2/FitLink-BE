@@ -12,6 +12,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.fitlink.IntegrationTest;
 import com.fitlink.auth.infra.SessionRepository;
 import jakarta.servlet.http.Cookie;
+import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -41,6 +42,17 @@ class LogoutApiTests extends IntegrationTest {
 
 		assertThat(jdbc.sql("SELECT revoked_at IS NOT NULL FROM auth_session").query(Boolean.class).single())
 			.isTrue();
+	}
+
+	@Test
+	void 로그아웃_응답에는_SESSION_쿠키가_지우는_것_하나뿐이다() throws Exception {
+		List<String> cookies = mockMvc
+			.perform(post("/auth/logout").header("X-CSRF", "1").cookie(new Cookie("SESSION", sessionId)))
+			.andReturn()
+			.getResponse()
+			.getHeaders(HttpHeaders.SET_COOKIE);
+
+		assertThat(cookies).filteredOn(c -> c.startsWith("SESSION=")).singleElement().asString().contains("Max-Age=0");
 	}
 
 	@Test

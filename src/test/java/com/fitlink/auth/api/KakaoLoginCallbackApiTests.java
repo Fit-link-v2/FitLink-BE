@@ -63,6 +63,7 @@ class KakaoLoginCallbackApiTests extends IntegrationTest {
 				callback("code-1", "state-2").cookie(state("state-2"), new Cookie("SESSION", oldId)));
 		String newId = cookieValue(setCookie(second, "SESSION"));
 
+		assertThat(second.getHeaders(HttpHeaders.SET_COOKIE)).filteredOn(c -> c.startsWith("SESSION=")).hasSize(1);
 		assertThat(newId).isNotEqualTo(oldId);
 		assertThat(jdbc.sql("SELECT revoked_at IS NOT NULL FROM auth_session WHERE session_hash = ?")
 				.param(sha256(oldId))
