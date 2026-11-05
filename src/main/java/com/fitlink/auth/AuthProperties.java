@@ -7,7 +7,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * 값이 비어 있으면 앱이 뜨지 않는다. 카카오 키는 환경변수로만 받는다.
  */
 @ConfigurationProperties("fitlink.auth")
-public record AuthProperties(Kakao kakao, Cookie cookie) {
+public record AuthProperties(Kakao kakao, Cookie cookie, String successUrl, String failureUrl) {
 
 	public record Kakao(String clientId, String clientSecret, String redirectUri) {
 	}

@@ -40,7 +40,7 @@ class KakaoRestClientTests {
 		kakao = MockRestServiceServer.bindTo(builder).build();
 		client = new KakaoRestClient(builder, new AuthProperties(
 				new AuthProperties.Kakao("client-1", "secret-1", "http://localhost:8080/auth/kakao/callback"),
-				new AuthProperties.Cookie("SESSION", "KAKAO-STATE")));
+				new AuthProperties.Cookie("SESSION", "KAKAO-STATE"), "http://app/", "http://app/?login=failed"));
 	}
 
 	@Test
