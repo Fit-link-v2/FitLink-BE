@@ -1,4 +1,4 @@
-package com.fitlink.instructor.api;
+package com.fitlink.auth.api;
 
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;

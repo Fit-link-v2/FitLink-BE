@@ -1,4 +1,4 @@
-package com.fitlink.instructor.api;
+package com.fitlink.auth.api;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.allOf;
@@ -10,7 +10,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fitlink.IntegrationTest;
-import com.fitlink.instructor.infra.SessionRepository;
+import com.fitlink.auth.infra.SessionRepository;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -39,7 +39,7 @@ class LogoutApiTests extends IntegrationTest {
 			.andExpect(header().string(HttpHeaders.SET_COOKIE, allOf(containsString("SESSION="),
 					containsString("Max-Age=0"), containsString("Path=/"), containsString("HttpOnly"))));
 
-		assertThat(jdbc.sql("SELECT revoked_at IS NOT NULL FROM instructor_session").query(Boolean.class).single())
+		assertThat(jdbc.sql("SELECT revoked_at IS NOT NULL FROM auth_session").query(Boolean.class).single())
 			.isTrue();
 	}
 
@@ -63,7 +63,7 @@ class LogoutApiTests extends IntegrationTest {
 			.andExpect(status().isForbidden())
 			.andExpect(jsonPath("$.code").value("CSRF_HEADER_MISSING"));
 
-		assertThat(jdbc.sql("SELECT revoked_at IS NULL FROM instructor_session").query(Boolean.class).single())
+		assertThat(jdbc.sql("SELECT revoked_at IS NULL FROM auth_session").query(Boolean.class).single())
 			.isTrue();
 	}
 

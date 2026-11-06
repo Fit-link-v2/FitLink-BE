@@ -6,7 +6,7 @@
 
 | 도메인 | 테이블 | 문서 |
 |---|---|---|
-| instructor | instructor · setting · instructor_session | [POLICY](spec/instructor/POLICY.md) · [데이터 모델](spec/instructor/data-model.md) |
+| instructor | instructor · setting · auth_session | [POLICY](spec/instructor/POLICY.md) · [데이터 모델](spec/instructor/data-model.md) |
 | schedule | recurrence · class_slot | [POLICY](spec/schedule/POLICY.md) · [데이터 모델](spec/schedule/data-model.md) |
 | membership | member · member_link | [POLICY](spec/membership/POLICY.md) · [데이터 모델](spec/membership/data-model.md) |
 | entitlement | entitlement · subscription · entitlement_adjustment | [POLICY](spec/entitlement/POLICY.md) · [데이터 모델](spec/entitlement/data-model.md) · [쓰기 경로](spec/entitlement/write-paths.md) |
@@ -47,3 +47,4 @@ BE 전용 결정. FE와 같이 따르는 결정은 [PRD 레포 `decisions/`](htt
 - [BE-ADR-0013](decisions/0013-stack-and-testing.md) 기술 스택은 Java LTS · Spring Boot · Spring MVC · Flyway, 테스트는 Testcontainers로 실제 PostgreSQL에 대해 한다 (accepted)
 - [BE-ADR-0014](decisions/0014-kakao-login-direct.md) 카카오 로그인은 Spring Security OAuth2 Client 없이 직접 구현한다 (accepted)
 - [BE-ADR-0015](decisions/0015-hosting-lightsail.md) BE는 AWS Lightsail 1대에 Docker Compose(Caddy · Spring · PostgreSQL)로 올린다 (accepted)
+- [BE-ADR-0016](decisions/0016-auth-module.md) 로그인 · 세션 코드는 도메인 모듈과 따로 `auth` 모듈에 둔다 (accepted)

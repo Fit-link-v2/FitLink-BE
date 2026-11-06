@@ -1,6 +1,6 @@
 package com.fitlink.config;
 
-import com.fitlink.instructor.api.SessionAuthenticationFilter;
+import com.fitlink.auth.api.SessionAuthenticationFilter;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;

@@ -23,3 +23,4 @@ BE 내부 설계 결정. FE와 같이 따르는 결정은 [PRD 레포 `decisions
 | [BE-ADR-0013](0013-stack-and-testing.md) | 기술 스택은 Java LTS · Spring Boot · Spring MVC · Flyway, 테스트는 Testcontainers로 실제 PostgreSQL에 대해 한다 | accepted |
 | [BE-ADR-0014](0014-kakao-login-direct.md) | 카카오 로그인은 Spring Security OAuth2 Client 없이 직접 구현한다 | accepted |
 | [BE-ADR-0015](0015-hosting-lightsail.md) | BE는 AWS Lightsail 1대에 Docker Compose(Caddy · Spring · PostgreSQL)로 올린다 | accepted |
+| [BE-ADR-0016](0016-auth-module.md) | 로그인 · 세션 코드는 도메인 모듈과 따로 `auth` 모듈에 둔다 | accepted |

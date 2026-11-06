@@ -1,4 +1,4 @@
-package com.fitlink.instructor.infra;
+package com.fitlink.auth.infra;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -33,7 +33,7 @@ class SessionRepositoryTests extends IntegrationTest {
 		assertThat(other).isNotEqualTo(sessionId);
 
 		byte[] expected = MessageDigest.getInstance("SHA-256").digest(sessionId.getBytes(StandardCharsets.US_ASCII));
-		assertThat(jdbc.sql("SELECT session_hash FROM instructor_session WHERE instructor_id = ? ORDER BY id")
+		assertThat(jdbc.sql("SELECT session_hash FROM auth_session WHERE instructor_id = ? ORDER BY id")
 				.param(instructorId)
 				.query(byte[].class)
 				.list())
@@ -44,12 +44,12 @@ class SessionRepositoryTests extends IntegrationTest {
 	@Test
 	void 확인하면_expires_at이_now_14일로_연장되고_instructor_id를_돌려준다() {
 		String sessionId = sessions.issue(instructorId);
-		jdbc.sql("UPDATE instructor_session SET expires_at = now() + interval '1 day'").update();
+		jdbc.sql("UPDATE auth_session SET expires_at = now() + interval '1 day'").update();
 
 		assertThat(sessions.touch(sessionId)).contains(instructorId);
 		assertThat(jdbc.sql("""
 				SELECT abs(extract(epoch FROM expires_at - (now() + interval '14 days'))) < 60
-				FROM instructor_session
+				FROM auth_session
 				""")
 				.query(Boolean.class)
 				.single())
@@ -59,7 +59,7 @@ class SessionRepositoryTests extends IntegrationTest {
 	@Test
 	void expires_at이_지난_세션은_확인_결과가_비어_있다() {
 		String sessionId = sessions.issue(instructorId);
-		jdbc.sql("UPDATE instructor_session SET expires_at = now() - interval '1 second'").update();
+		jdbc.sql("UPDATE auth_session SET expires_at = now() - interval '1 second'").update();
 
 		assertThat(sessions.touch(sessionId)).isEmpty();
 	}
@@ -70,7 +70,7 @@ class SessionRepositoryTests extends IntegrationTest {
 
 		sessions.revoke(sessionId);
 
-		assertThat(jdbc.sql("SELECT revoked_at IS NOT NULL FROM instructor_session").query(Boolean.class).single())
+		assertThat(jdbc.sql("SELECT revoked_at IS NOT NULL FROM auth_session").query(Boolean.class).single())
 			.isTrue();
 		assertThat(sessions.touch(sessionId)).isEmpty();
 	}

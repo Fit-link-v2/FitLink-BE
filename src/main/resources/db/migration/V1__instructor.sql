@@ -1,4 +1,4 @@
--- 강사 가입 · 로그인에 필요한 테이블: 강사, 강사별 설정, 로그인 세션
+-- 강사와 강사별 설정
 
 -- 카카오 로그인으로만 가입한다. 비밀번호 컬럼이 없다.
 CREATE TABLE instructor (
@@ -19,16 +19,3 @@ CREATE TABLE setting (
                           CHECK (open_range_days BETWEEN 7 AND 28),
   updated_at            timestamptz NOT NULL DEFAULT now()
 );
-
--- 세션 ID 원본은 쿠키에만 있고 DB에는 SHA-256 해시만 남는다. DB가 유출돼도 세션을 가로챌 수 없다.
-CREATE TABLE instructor_session (
-  id            bigserial   PRIMARY KEY,
-  instructor_id bigint      NOT NULL REFERENCES instructor(id),
-  session_hash  bytea       NOT NULL UNIQUE,   -- SHA-256, 32바이트
-  created_at    timestamptz NOT NULL DEFAULT now(),
-  last_seen_at  timestamptz NOT NULL DEFAULT now(),
-  expires_at    timestamptz NOT NULL,          -- last_seen_at + 14일
-  revoked_at    timestamptz                    -- 로그아웃
-);
-
-CREATE INDEX instructor_session_owner_idx ON instructor_session (instructor_id);

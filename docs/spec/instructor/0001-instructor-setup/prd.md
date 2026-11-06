@@ -70,7 +70,7 @@ flowchart LR
 근거: PRD-0001 AC 1.1.5
 
 - [ ] 다음 경우 302로 설정의 실패 주소에 보내고 세션을 만들지 않는다: 카카오가 `error`를 줌(동의 취소 등), `state` 쿠키가 없음, `state`가 다름, 토큰 교환 실패, 사용자 조회 실패
-- [ ] 실패해도 `instructor` · `instructor_session` 행이 생기지 않는다
+- [ ] 실패해도 `instructor` · `auth_session` 행이 생기지 않는다
 
 ### AC-6. 로그인 상태는 `GET /me`로 확인한다
 
@@ -105,7 +105,7 @@ flowchart LR
 
 근거: DEC-0002, BE-ADR-0014
 
-- [ ] DB에 세션 ID 원본 · 카카오 토큰이 없다(`instructor_session`에 해시 컬럼만, 카카오 토큰 컬럼 없음)
+- [ ] DB에 세션 ID 원본 · 카카오 토큰이 없다(`auth_session`에 해시 컬럼만, 카카오 토큰 컬럼 없음)
 - [ ] 애플리케이션 로그에 카카오 `code` · 액세스 토큰 · client secret · 세션 ID가 찍히지 않는다
 
 ### Phase 1 흐름
@@ -148,7 +148,7 @@ PRD 1 단계에서 실제로 `CREATE TABLE`하는 것은 이 9개다. `booking` 
 ```mermaid
 erDiagram
     INSTRUCTOR ||--|| SETTING : "자기 설정"
-    INSTRUCTOR ||--o{ INSTRUCTOR_SESSION : "로그인 세션"
+    INSTRUCTOR ||--o{ AUTH_SESSION : "로그인 세션"
     INSTRUCTOR ||--o{ MEMBER : "자기 회원"
     INSTRUCTOR ||--o{ RECURRENCE : "자기 시간표"
     INSTRUCTOR {
@@ -158,7 +158,7 @@ erDiagram
         text email
         text name
     }
-    INSTRUCTOR_SESSION {
+    AUTH_SESSION {
         bigint id PK
         bigint instructor_id FK
         bytea session_hash UK "sha256 32B"
@@ -287,7 +287,7 @@ CREATE TABLE setting (
 
 ```sql
 -- 강사 로그인 세션 (DEC-0002 · DEC-0008). 세션 ID 원본은 쿠키에만 있고 DB에는 해시만 남는다.
-CREATE TABLE instructor_session (
+CREATE TABLE auth_session (
   id            bigserial   PRIMARY KEY,
   instructor_id bigint      NOT NULL REFERENCES instructor(id),
   session_hash  bytea       NOT NULL UNIQUE,   -- SHA-256, 32바이트
@@ -297,19 +297,19 @@ CREATE TABLE instructor_session (
   revoked_at    timestamptz                    -- 로그아웃
 );
 
-CREATE INDEX instructor_session_owner_idx ON instructor_session (instructor_id);
+CREATE INDEX auth_session_owner_idx ON auth_session (instructor_id);
 ```
 
 ```sql
 -- 요청마다: 유효한 세션인지 확인하면서 만료를 연장한다 (PRD 1 AC 1.1.6)
-UPDATE instructor_session
+UPDATE auth_session
    SET last_seen_at = now(), expires_at = now() + interval '14 days'
  WHERE session_hash = $hash AND revoked_at IS NULL AND expires_at > now()
 RETURNING instructor_id;
 -- 0행이면 로그인 화면으로
 
 -- 로그아웃 (PRD 1 AC 1.1.7)
-UPDATE instructor_session SET revoked_at = now()
+UPDATE auth_session SET revoked_at = now()
  WHERE session_hash = $hash AND revoked_at IS NULL;
 ```
 
@@ -509,8 +509,8 @@ ALTER TABLE entitlement ADD CONSTRAINT entitlement_kind_no_overlap
 |---|---|---|
 | (제품 형태) | 강사끼리 데이터가 섞이지 않음 | `member.instructor_id`, `recurrence.instructor_id`, `class_slot.instructor_id`, `setting` PK |
 | 1 · AC 2.1.1 | 정원 1 이상 50 이하 | `recurrence` CHECK capacity BETWEEN 1 AND 50 |
-| 1 · AC 1.1.6 | 세션 2주, 요청마다 연장 | `instructor_session.expires_at` 조건부 UPDATE |
-| 1 · AC 1.1.7 | 로그아웃 즉시 무효 | `instructor_session.revoked_at` |
+| 1 · AC 1.1.6 | 세션 2주, 요청마다 연장 | `auth_session.expires_at` 조건부 UPDATE |
+| 1 · AC 1.1.7 | 로그아웃 즉시 무효 | `auth_session.revoked_at` |
 | 1 · AC 1.2.2 | 가입 시 설정 1행 | `setting` PK = instructor_id. 가입 트랜잭션에서 INSERT |
 | 1 · AC 1.2.3 | 같은 카카오 계정은 한 번만 가입 | `instructor_identity_uk` (provider, provider_user_id) |
 | 1 · AC 1.3.1 | 강사는 자기 데이터만 | `member.instructor_id`, `recurrence.instructor_id`, `class_slot.instructor_id`. 모든 강사 화면 쿼리에 소유자 조건 |
@@ -728,10 +728,10 @@ RETURNING id;
 로그인 트랜잭션 안에서 이전 세션 무효와 새 세션 저장을 같이 한다.
 
 ```sql
-UPDATE instructor_session SET revoked_at = now()
+UPDATE auth_session SET revoked_at = now()
  WHERE session_hash = $oldHash AND revoked_at IS NULL;          -- 요청에 이전 쿠키가 있을 때만
 
-INSERT INTO instructor_session (instructor_id, session_hash, expires_at)
+INSERT INTO auth_session (instructor_id, session_hash, expires_at)
 VALUES ($instructorId, $newHash, now() + interval '14 days');
 ```
 
@@ -748,8 +748,9 @@ Phase 단위로 나눠 만든다. 번호는 Flyway 파일 이름 `V{번호}__{�
 
 | 번호 | 내용 | 순서 · 주의 |
 |---|---|---|
-| 1 | `instructor`, `setting`(`open_range_days`), `instructor_session` | Phase 1 |
-| 2 ~ | `btree_gist` 확장, `recurrence`, `class_slot`, `member`, `member_link`, `subscription`, `entitlement` | Phase 2 이후. 단위는 그 Phase의 plan에서 정한다 |
+| 1 | `instructor`, `setting`(`open_range_days`) | Phase 1 |
+| 2 | `auth_session` | Phase 1. 로그인 · 세션은 `auth` 모듈이라 파일을 나눴다(BE-ADR-0016) |
+| 3 ~ | `btree_gist` 확장, `recurrence`, `class_slot`, `member`, `member_link`, `subscription`, `entitlement` | Phase 2 이후. 단위는 그 Phase의 plan에서 정한다 |
 
 `cancel_deadline_hours`는 기능 0005의 마이그레이션에서 붙는다. 1차 배포에는 PRD 1 ~ 3이 함께 나간다.
 
@@ -773,7 +774,7 @@ Phase 단위로 나눠 만든다. 번호는 Flyway 파일 이름 `V{번호}__{�
 | ~~Q8~~ | ~~OAuth provider를 무엇으로 할 것인가~~ | **해소.** 카카오([DEC-0001](https://github.com/Fit-link-v2/Fit-link-PRD/blob/main/decisions/0001-instructor-kakao-oauth.md)). CHECK는 `KAKAO` 하나 |
 | ~~Q9~~ | ~~가입을 열어둘 것인가~~ | **해소.** 개방([DEC-0001](https://github.com/Fit-link-v2/Fit-link-PRD/blob/main/decisions/0001-instructor-kakao-oauth.md)) |
 | Q10 | 휴강 통보를 어떻게 할 것인가 | 강사가 카톡으로 한다([DEC-0006](https://github.com/Fit-link-v2/Fit-link-PRD/blob/main/decisions/0006-booking-rules.md)). 회원이 링크를 열기 전까지 모른다. 자동 알림은 PRD 0에서 범위 밖 |
-| ~~Q11~~ | ~~세션 저장을 직접 만들지, Spring Session JDBC를 쓸지~~ | **해소.** 직접 만든 `instructor_session`([BE-ADR-0008](../../../decisions/0008-session-store.md)) |
+| ~~Q11~~ | ~~세션 저장을 직접 만들지, Spring Session JDBC를 쓸지~~ | **해소.** 직접 만든 `auth_session`([BE-ADR-0008](../../../decisions/0008-session-store.md)) |
 | ~~Q12~~ | ~~월 단위 주기에서 시작일이 29~31일이면 짧은 달을 어떻게 세나~~ | **해소.** 월 단위를 없애고 `WEEK` · `FOUR_WEEKS` 두 가지로 한다([DEC-0011](https://github.com/Fit-link-v2/Fit-link-PRD/blob/main/decisions/0011-entitlement-rules-four-week-and-sequential-kinds.md)). 종료일 CHECK를 두 단위 모두에 건다 |
 | Q13 | 월 정액을 중간에 끝내면 | 남은 주기, 이미 만든 수강권, 그 수강권으로 잡은 예약을 어떻게 할지. 정하기 전까지 `subscription`에는 종료 컬럼을 두지 않는다 |
 | Q14 | 카카오 이메일을 못 받으면 | 비즈 앱 전환이 막히면 `instructor.email`이 계속 비어 있다. 스키마는 이미 NULL을 허용한다 |

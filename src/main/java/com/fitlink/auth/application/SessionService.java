@@ -1,6 +1,6 @@
-package com.fitlink.instructor.application;
+package com.fitlink.auth.application;
 
-import com.fitlink.instructor.infra.SessionRepository;
+import com.fitlink.auth.infra.SessionRepository;
 import java.util.Optional;
 import org.springframework.stereotype.Service;
 

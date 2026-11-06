@@ -4,7 +4,7 @@
 
 | 도메인 | 테이블 | ERD |
 |---|---|---|
-| instructor | instructor · setting · instructor_session | [강사 ERD](../spec/instructor/data-model.md) |
+| instructor | instructor · setting · auth_session | [강사 ERD](../spec/instructor/data-model.md) |
 | schedule | recurrence · class_slot | [시간표 ERD](../spec/schedule/data-model.md) |
 | membership | member · member_link | [회원 ERD](../spec/membership/data-model.md) |
 | entitlement | entitlement · subscription · entitlement_adjustment | [수강권 ERD](../spec/entitlement/data-model.md) |
@@ -56,7 +56,7 @@ flowchart LR
 | 테이블 | 도메인 | 도입 기능 | 역할 |
 |---|---|---|---|
 | instructor | instructor | 0001 | 강사. 카카오 계정 1개당 1행 |
-| instructor_session | instructor | 0001 | 강사 로그인 세션. 세션 ID 해시 |
+| auth_session | instructor | 0001 | 강사 로그인 세션. 세션 ID 해시. 코드는 `auth` 모듈([BE-ADR-0016](../decisions/0016-auth-module.md)) |
 | setting | instructor | 0001 · 0005 | 강사별 설정. 오픈 범위, 취소 마감 시간 |
 | recurrence | schedule | 0001 | 반복 규칙. 요일 · 시각 · 정원. 매주 고정 |
 | class_slot | schedule | 0001 | 슬롯. 회원이 예약하는 단위 |
@@ -78,7 +78,7 @@ flowchart LR
 | setting | **PK 그 자체** | 직접 |
 | member | **있음** | 직접. 부모가 없다 |
 | recurrence | **있음** | 직접. 부모가 없다 |
-| instructor_session | 있음 | 직접. 세션의 주인 |
+| auth_session | 있음 | 직접. 세션의 주인 |
 | class_slot | **있음** | 직접. 일회성 수업은 `recurrence_id`가 NULL이라 부모를 탈 수 없다 |
 | member_link · entitlement · subscription · booking · waitlist · event_log | 없음 | `member_id` → `member.instructor_id` |
 | entitlement_adjustment | 없음 | `entitlement_id` → `entitlement.member_id` → `member.instructor_id` |
