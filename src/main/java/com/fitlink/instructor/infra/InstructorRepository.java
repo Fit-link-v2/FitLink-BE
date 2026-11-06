@@ -1,5 +1,6 @@
 package com.fitlink.instructor.infra;
 
+import com.fitlink.instructor.application.InstructorProfile;
 import java.util.Optional;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
@@ -43,6 +44,13 @@ public class InstructorRepository {
 		jdbc.sql("INSERT INTO setting (instructor_id) VALUES (:instructorId)")
 			.param("instructorId", instructorId)
 			.update();
+	}
+
+	public Optional<InstructorProfile> findProfile(long instructorId) {
+		return jdbc.sql("SELECT id, name, email FROM instructor WHERE id = :id")
+			.param("id", instructorId)
+			.query(InstructorProfile.class)
+			.optional();
 	}
 
 }
