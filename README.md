@@ -2,19 +2,55 @@
 
 FitLink 백엔드 개발 레포. 개인 강사의 그룹 수업 예약 서비스의 서버 코드와 설계 문서를 함께 둔다.
 
-- 스택: Java · Spring Boot, PostgreSQL
-- 상태: 설계 단계. 애플리케이션 코드는 아직 없다
+- 스택: Java 25 · Spring Boot 4.1 · Spring Modulith, PostgreSQL 17 ([아키텍처 개요](docs/architecture/overview.md))
+- 상태: 프로젝트 셋업 완료. 기능 코드는 아직 없다
 
 ## 구조
 
 ```
 FitLink-BE/
-  README.md      이 문서
-  docs/          설계 문서. 도메인별 현재 모델 · 기능별 개발 PRD · 설계 결정
-  (Spring Boot 프로젝트는 만들 때 이 자리에 추가)
+  README.md
+  build.gradle.kts            빌드 설정 (Gradle Kotlin DSL)
+  compose.yaml                local 개발용 PostgreSQL
+  src/main/java/com/fitlink/
+    instructor/ schedule/ membership/ entitlement/ booking/ analytics/
+                              도메인 모듈. 각 모듈 안은 api · application · infra
+    config/                   공통 설정 (Spring Security)
+  src/main/resources/
+    application.properties    공통 설정
+    application-local.properties  local 프로필 (compose.yaml의 DB)
+    db/migration/             Flyway 마이그레이션 V{번호}__{설명}.sql
+  docs/                       설계 문서. 도메인별 현재 모델 · 기능별 개발 PRD · 설계 결정
 ```
 
 문서 읽는 법과 작성 규칙은 [`docs/README.md`](docs/README.md), 전체 목록은 [`docs/SUMMARY.md`](docs/SUMMARY.md)에 있다.
+
+## 로컬 실행
+
+필요한 것: JDK(아무 버전이나. 빌드가 JDK 25를 자동으로 내려받는다), Docker.
+
+```bash
+docker compose up -d                          # PostgreSQL (localhost:5433)
+SPRING_PROFILES_ACTIVE=local ./gradlew bootRun
+curl -i localhost:8080/actuator/health        # 200
+curl -i localhost:8080/me                     # 401 (로그인 전)
+docker compose down                           # 종료. 데이터는 볼륨에 남는다. 지우려면 -v
+```
+
+## 테스트
+
+```bash
+./gradlew test
+```
+
+DB가 닿는 테스트는 Testcontainers가 PostgreSQL 컨테이너를 직접 띄운다. compose의 DB는 쓰지 않는다.
+
+Docker Desktop이 아닌 Colima를 쓰면 Testcontainers가 Docker를 찾지 못한다. 셸 설정에 다음을 넣는다.
+
+```bash
+export DOCKER_HOST="unix://$HOME/.colima/default/docker.sock"
+export TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock
+```
 
 ## 관련 레포
 
