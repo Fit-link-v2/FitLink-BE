@@ -1,0 +1,6 @@
+# compose.yaml의 local PostgreSQL
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5433/fitlink
+    username: fitlink
+    password: fitlink
