@@ -33,6 +33,7 @@ class SecurityConfig {
 			.addFilterAfter(new CsrfHeaderFilter(errors), AuthorizationFilter.class)
 			.authorizeHttpRequests(auth -> auth
 				.requestMatchers("/actuator/health").permitAll()
+				.requestMatchers(HttpMethod.GET, "/auth/kakao").permitAll()
 				.requestMatchers(HttpMethod.POST, "/auth/logout").permitAll()
 				.anyRequest().authenticated())
 			.exceptionHandling(ex -> ex.authenticationEntryPoint((request, response, e) -> errors.write(response,
