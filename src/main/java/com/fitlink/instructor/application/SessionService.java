@@ -18,4 +18,9 @@ public class SessionService {
 		return sessions.touch(sessionId);
 	}
 
+	// 이미 무효인 세션이면 아무것도 바꾸지 않는다
+	public void revoke(String sessionId) {
+		sessions.revoke(sessionId);
+	}
+
 }
