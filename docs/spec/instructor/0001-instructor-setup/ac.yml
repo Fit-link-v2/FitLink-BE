@@ -105,7 +105,7 @@ criteria:
     description: "세션 ID · 카카오 code · 토큰 · secret은 DB와 로그에 남지 않는다"
     type: security
     layers: [schema, test]
-    assertion: "auth_session에 세션 원본 컬럼이 없고 저장된 값이 쿠키 값과 다르다(해시). 로그인 흐름 테스트 중 출력된 로그에 테스트용 code · 액세스 토큰 · client secret · 세션 ID 문자열이 없다"
+    assertion: "auth_session에 세션 원본 컬럼이 없고 저장된 값이 쿠키 값과 다르다(해시). 로그인 · 로그아웃 · 카카오 실패 흐름 테스트 중 출력된 로그에 테스트용 code · 액세스 토큰 · client secret · 세션 ID 문자열이 없다. 우리 코드와 Spring 웹 · 보안 · JDBC logger를 TRACE로 낮춰도 같다"
     priority: must
     verify: machine
     status: active

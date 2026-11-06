@@ -107,7 +107,7 @@ flowchart LR
 근거: DEC-0002, BE-ADR-0014
 
 - [ ] DB에 세션 ID 원본 · 카카오 토큰이 없다(`auth_session`에 해시 컬럼만, 카카오 토큰 컬럼 없음)
-- [ ] 애플리케이션 로그에 카카오 `code` · 액세스 토큰 · client secret · 세션 ID가 찍히지 않는다
+- [ ] 애플리케이션 로그에 카카오 `code` · 액세스 토큰 · client secret · 세션 ID가 찍히지 않는다. 알려진 Spring · Tomcat logger는 수준을 낮춰도 찍히지 않게 INFO로 고정한다
 
 ### Phase 1 흐름
 

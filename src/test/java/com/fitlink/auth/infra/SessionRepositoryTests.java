@@ -41,6 +41,24 @@ class SessionRepositoryTests extends IntegrationTest {
 			.isEqualTo(expected);
 	}
 
+	// 컬럼을 하나라도 더하면 이 테스트가 깨진다. 세션 테이블에 무엇을 저장하는지 리뷰에서 다시 보게 하려는 의도다
+	@Test
+	void 세션_테이블에는_세션_ID_원본_컬럼이_없고_어느_테이블에도_카카오_토큰_컬럼이_없다() {
+		assertThat(jdbc.sql("""
+				SELECT column_name FROM information_schema.columns
+				WHERE table_schema = 'public' AND table_name = 'auth_session'
+				""").query(String.class).list())
+			.containsExactlyInAnyOrder("id", "instructor_id", "session_hash", "created_at", "last_seen_at",
+					"expires_at", "revoked_at");
+		assertThat(jdbc.sql("""
+				SELECT table_name || '.' || column_name FROM information_schema.columns
+				WHERE table_schema = 'public'
+				  AND (column_name LIKE '%token%' OR column_name LIKE '%secret%' OR column_name LIKE '%access%'
+				       OR column_name LIKE '%refresh%' OR column_name LIKE '%credential%')
+				""").query(String.class).list())
+			.isEmpty();
+	}
+
 	@Test
 	void 확인하면_expires_at이_now_14일로_연장되고_instructor_id를_돌려준다() {
 		String sessionId = sessions.issue(instructorId);
