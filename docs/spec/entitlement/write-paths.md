@@ -12,8 +12,9 @@
 BEGIN;
 
 -- 같은 회원의 수강권 등록을 한 줄로 세운다.
-SELECT id FROM member WHERE id = $member_id AND instructor_id = $me FOR NO KEY UPDATE;
+SELECT status FROM member WHERE id = $member_id AND instructor_id = $me FOR NO KEY UPDATE;
 -- 0행이면 남의 회원이거나 없는 회원. 롤백
+-- ENDED면 거부(MEMBER_ENDED). 다시 활성화한 뒤 등록한다. 롤백
 ```
 
 `FOR NO KEY UPDATE`로 충분하다. 겹침 검사끼리만 한 줄로 세우면 되고, 회원 행의 키를 바꾸는 것이 아니기 때문이다. `FOR UPDATE`는 `FOR KEY SHARE` 잠금과도 충돌한다(PostgreSQL 문서 "Explicit Locking"의 행 잠금 충돌 표).
@@ -55,15 +56,15 @@ RETURNING id;
 COMMIT;
 ```
 
-`$ends_on`은 애플리케이션이 계산한다. `starts_on + 주기 길이 × period_count - 1일`이고, 주기 길이는 `WEEK` 7일 · `FOUR_WEEKS` 28일이다([DEC-0011](https://github.com/Fit-link-v2/Fit-link-PRD/blob/main/decisions/0011-entitlement-rules-four-week-and-sequential-kinds.md)). DB의 `subscription_end` CHECK가 같은 식을 강제한다.
+`$period_count` · `$ends_on`은 애플리케이션이 요청의 `weeks`(등록 기간, 4의 배수)로 계산한다. `period_count`는 `WEEK`면 `weeks`, `FOUR_WEEKS`면 `weeks / 4`이고, `ends_on`은 `starts_on + 7 × weeks - 1일`이다(주기 길이 `WEEK` 7일 · `FOUR_WEEKS` 28일, [DEC-0011](https://github.com/Fit-link-v2/Fit-link-PRD/blob/main/decisions/0011-entitlement-rules-four-week-and-sequential-kinds.md)). DB의 `subscription_end` CHECK는 `starts_on + 주기 길이 × period_count - 1일`로 같은 값을 강제한다. `weeks`가 4의 배수일 때만 두 식이 같으므로, 애플리케이션은 `weeks`를 먼저 400으로 검사한다.
 
-거부할 때의 에러 코드는 API 설계에서 정한다.
+거부할 때의 에러 코드는 [BE-0001](../instructor/0001-instructor-setup/prd.md) 3.2 API의 에러 코드 목록이다.
 
 ## 2. 주기별 수강권 생성
 
 > 변경 이력 (구현 전, 설계상 관련 기능): [0001](../instructor/0001-instructor-setup/prd.md)
 
-매일 1회 배치와 월 정액 등록 직후에 같은 쿼리를 돈다. 강사가 오픈 범위를 늘릴 때도 돌리는 것을 제안한다(BE-0001 Q19). 오늘부터 그 강사의 오픈 범위 끝까지에 걸치는 주기를 만든다(PRD 1 AC 3.2.8). 오픈 범위는 `[오늘, 오늘 + N일)`이다([BE-ADR-0006](../../decisions/0006-time-and-timezone.md)). 회원이 오픈 범위 안의 수업을 예약하려면 그 수업 날짜를 덮는 수강권 행이 이미 있어야 하기 때문이다.
+매일 자정 · 앱 시작 때(슬롯 생성에 이어서, 같은 `$today`로)와 월 정액 등록 직후에 같은 쿼리를 돈다([BE-0001](../instructor/0001-instructor-setup/prd.md) 3.1 시간표 절의 "언제 도는가"). 강사가 오픈 범위를 늘릴 때도 그 트랜잭션 안에서 그 강사의 월 정액마다 돈다(BE-0001 3.1 시간표 절의 모듈 방향). 오늘부터 그 강사의 오픈 범위 끝까지에 걸치는 주기를 만든다(PRD 1 AC 3.2.8). 오픈 범위는 `[오늘, 오늘 + N일)`이다([BE-ADR-0006](../../decisions/0006-time-and-timezone.md)). 회원이 오픈 범위 안의 수업을 예약하려면 그 수업 날짜를 덮는 수강권 행이 이미 있어야 하기 때문이다.
 
 ```sql
 -- $today = (now() AT TIME ZONE 'Asia/Seoul')::date
@@ -89,4 +90,6 @@ ON CONFLICT (source_id, window_start) WHERE source_id IS NOT NULL DO NOTHING;
 
 배치는 생성 대상 월 정액의 id 목록을 뽑은 뒤 **한 건씩 따로 트랜잭션으로** 이 쿼리를 돈다. `ON CONFLICT`가 받아 주는 것은 지정한 유니크 인덱스의 충돌뿐이고, 종류 겹침 EXCLUDE 위반은 그대로 에러가 되어 그 문장 전체가 실패한다(PostgreSQL 문서 INSERT의 conflict_target 설명). 한 문장으로 전체를 돌면 한 건의 위반이 모든 회원의 생성을 막는다. 실패한 건은 로그로 남긴다. 1의 등록 검사가 정상이라면 이 실패는 일어나지 않는다.
 
-수강 종료(ENDED) 회원의 월 정액을 계속 만들지는 정하지 않았다. 중도 종료(BE-0001 Q13)와 같이 정한다.
+오픈 범위를 늘리는 요청은 하나의 트랜잭션이라 건마다 트랜잭션을 나눌 수 없다. 대신 월 정액마다 savepoint(트랜잭션 안에서 그 지점까지만 되돌리는 표시)를 두고 돈다. 한 건이 실패하면 그 건만 savepoint로 되돌리고 로그를 남긴다. 오픈 범위 변경과 슬롯 생성은 그대로 커밋된다.
+
+수강 종료(ENDED) 회원의 월 정액 주기도 계속 만든다. ENDED는 되돌릴 수 있고(PRD 1 AC 3.3.3) 예약은 PRD 2 · 3이 막는다(AC 3.3.2). 다시 활성화했을 때 주기가 비어 있지 않게 하려는 것이다. 월 정액 중도 종료는 별개이고, 1차 배포에는 없다(BE-0001 Q13).
