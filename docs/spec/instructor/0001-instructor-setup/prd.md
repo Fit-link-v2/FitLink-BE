@@ -16,19 +16,20 @@
 
 ### 진행 단위
 
-열린 질문이 없는 US 1(가입 · 로그인)을 먼저 끝까지 만든다. US 2 ~ 5를 막던 열린 질문(Q23 월 정액 요청 모양 · 일회성 수업 규칙)은 정했다. 이 문서의 2절에 AC를 더하고 plan에 Phase를 더한다.
+열린 질문이 없는 US 1(가입 · 로그인)을 먼저 끝까지 만든다. US 2 ~ 5를 막던 열린 질문(Q23 월 정액 요청 모양 · 일회성 수업 규칙)은 정했다. Phase마다 이 문서의 2절에 AC를 더하고 plan에 Phase를 더한다.
 
 | Phase | 제품 User Story | 개발 AC | 상태 |
 |---|---|---|---|
 | 1 | US 1 가입 · 로그인 · 세션 | AC-1 ~ AC-10 | 이 문서에서 확정 |
-| 2 ~ | US 2 시간표 · US 3 회원 · 수강권 · US 4 링크 · US 5 개봉 상태 | 추가 예정 | 3절 설계. 막던 열린 질문 해소, AC 작성 전 |
+| 2 | US 2 시간표 · 오픈 범위, 매일 자정 작업(회차 채우기 · 만료 세션 삭제) | AC-11 ~ AC-22 | 이 문서에서 확정 |
+| 3 ~ | US 3 회원 · 수강권 · US 4 링크 · US 5 개봉 상태 | 추가 예정 | 3절 설계. AC 작성 전 |
 
-baseline 동결은 Phase 단위로 한다. Phase 1의 AC-1 ~ AC-10은 plan 승인 뒤 바꾸지 않는다. Phase 2 이후 AC는 번호를 이어서(AC-11 ~) 더하고 그때 다시 baseline을 커밋한다.
+baseline 동결은 Phase 단위로 한다. Phase 1의 AC-1 ~ AC-10은 plan 승인 뒤 바꾸지 않는다. Phase 2 이후 AC는 번호를 이어서 더하고 그때 다시 baseline을 커밋한다. Phase 2는 AC-11 ~ AC-22다.
 
 ```mermaid
 flowchart LR
-    P1["Phase 1<br/>가입 · 로그인 · 세션<br/>instructor"] --> P2["Phase 2 ~<br/>시간표 · 회원 · 수강권 · 링크<br/>schedule · membership · entitlement"]
-    Q["보류한 열린 질문<br/>Q30 · Q32 도메인"] -.->|배포 전| P2
+    P1["Phase 1<br/>가입 · 로그인 · 세션<br/>auth · instructor"] --> P2["Phase 2<br/>시간표 · 오픈 범위 · 자정 작업<br/>schedule · instructor · auth"] --> P3["Phase 3 ~<br/>회원 · 수강권 · 링크<br/>membership · entitlement"]
+    Q["보류한 열린 질문<br/>Q30 · Q32 도메인"] -.->|배포 전| P3
 ```
 
 ## 2. 인수 조건
@@ -136,6 +137,116 @@ sequenceDiagram
     B->>API: POST /auth/logout + X-CSRF: 1 (AC-9)
     API->>DB: revoked_at = now() (AC-8)
     API-->>B: 204 + 쿠키 삭제
+```
+
+### Phase 2. 시간표 · 오픈 범위 · 매일 자정 작업
+
+근거는 PRD-0001 US 2와 이 문서의 열린 질문 해소 결과다. "지금" · "오늘"은 서울 기준이고 애플리케이션 `Clock`에서 읽는다(3.3 시각). 오픈 범위는 `[오늘, 오늘 + N일)`이다. 모든 강사 API는 다른 강사의 데이터를 목록에 넣지 않고, 다른 강사의 `{id}`는 없는 id와 같은 404다(PRD-0001 AC 1.3.1 · 1.3.2).
+
+### AC-11. 반복 규칙은 요일마다 하나씩 등록된다
+
+근거: PRD-0001 AC 2.1.5, Q2
+
+- [ ] `POST /instructor/recurrences` `{ weekdays, startTime, capacity }`는 선택한 요일마다 규칙 1개를 한 트랜잭션에서 만들고 201 `{ items: [Recurrence] }`를 준다
+- [ ] `weekdays`가 비었거나 중복, `startTime`이 `HH:mm`이 아님, `capacity`가 1 ~ 50 밖이면 400 VALIDATION_FAILED이고 아무것도 저장하지 않는다
+- [ ] 같은 요일 · 시각의 켜진 규칙이 있으면 409 RECURRENCE_DUPLICATE와 겹친 요일(`weekdays`)을 주고, 나머지 요일도 저장하지 않는다
+- [ ] `GET /instructor/recurrences`는 월 ~ 일, 같은 요일은 시각 순이다(Q34)
+
+### AC-12. 규칙을 저장하면 오픈 범위 안의 회차가 생긴다
+
+근거: PRD-0001 AC 2.1.2 · 2.1.3, Q34
+
+- [ ] 규칙 등록 트랜잭션에서 오픈 범위 안의 그 요일 회차를 만든다. 정원은 규칙 값을 복사한다. 시작 시각이 지금 이전인 오늘 회차는 만들지 않는다
+- [ ] 슬롯의 `starts_at`은 서울 날짜 + 규칙 시각이다(예: 화 20:00 → `…T20:00:00+09:00`)
+- [ ] 같은 규칙으로 생성을 다시 돌려도 회차가 늘지 않는다(`(recurrence_id, occurs_on)`)
+
+### AC-13. 규칙을 끄면 이후 생성만 멈추고, 다시 켜면 이어서 만든다
+
+근거: PRD-0001 AC 2.1.4, Q18
+
+- [ ] `PATCH /instructor/recurrences/{id}` `{ active: false }`는 이미 만든 회차를 그대로 두고, 이후 생성은 그 규칙의 회차를 만들지 않는다
+- [ ] `{ active: true }`로 다시 켜면 같은 트랜잭션에서 오픈 범위 안의 회차를 만든다. 같은 요일 · 시각의 켜진 규칙이 있으면 409 RECURRENCE_DUPLICATE
+
+### AC-14. 꺼진 규칙의 남은 회차는 같은 요일 · 시각의 규칙이 이어받는다
+
+근거: Q18
+
+- [ ] 규칙을 만들거나 다시 켤 때, 같은 강사 · 요일 · 시각의 꺼진 규칙이 가진 오늘 이후 회차는 그 규칙의 회차가 된다. 시각 변경 · 휴강 · 정원은 그대로다
+- [ ] 이어받은 날에는 회차가 새로 생기지 않는다. 시각을 옮겨 둔 회차 옆에 원래 시각 회차가 다시 생기지 않는다
+- [ ] 새 규칙의 정원은 이어받은 회차에 적용되지 않고, 새로 만드는 회차부터 쓴다
+
+### AC-15. 같은 강사의 같은 시각에 휴강 아닌 수업은 하나다
+
+근거: Q18, Q33
+
+- [ ] 일회성 수업 등록 · 슬롯 시각 변경이 휴강 아닌 수업과 같은 시각이면 409 SLOT_TIME_TAKEN이고 바뀌지 않는다. 휴강한 수업의 시각에는 열 수 있다
+- [ ] 회차 생성은 그 강사에게 같은 시각의 슬롯이 있으면 휴강이어도 건너뛴다. 휴강한 일회성 수업 자리에 나중에 만든 규칙의 회차가 생기지 않는다(PRD-0001 AC 2.3.4)
+
+### AC-16. 매일 자정과 앱 시작 때 오픈 범위 끝까지 채운다
+
+근거: PRD-0001 AC 2.2.1 · 2.2.2
+
+- [ ] 매일 0시(서울)와 앱이 시작될 때 모든 강사의 켜진 규칙으로 오픈 범위 안의 회차를 만든다. 어제 실행 뒤 범위 끝에 새로 들어온 날이 채워진다
+- [ ] 여러 번 돌려도 결과가 같다. 휴강 · 시각을 바꾼 회차는 다시 만들어지지 않는다
+
+### AC-17. 강사 슬롯 목록 · 상세
+
+근거: PRD-0001 AC 1.3.1 · 1.3.2 · 2.4.2, Q25 · Q26 · Q34
+
+- [ ] `GET /instructor/slots`는 시작 시각이 지금 이후인 자기 슬롯 전부를 시각 순으로 주고 `openRangeDays`를 같이 준다. 진행 중이거나 지난 수업은 넣지 않는다
+- [ ] 휴강한 슬롯도 넣고 `canceledAt`이 채워진다. 오픈 범위를 줄여 범위 밖에 남은 슬롯도 넣는다
+- [ ] `GET /instructor/slots/{id}`는 `SlotDetail`이고 일회성 수업이면 `recurrence`가 `null`이다. 다른 강사의 슬롯은 404
+
+### AC-18. 반복 회차는 그 회차의 시각만 바꾼다
+
+근거: PRD-0001 AC 2.3.2 · 2.3.3, Q21
+
+- [ ] `PATCH /instructor/slots/{id}` `{ startTime }`은 그 슬롯의 시각만 같은 날 안에서 바꾼다. 규칙과 다른 주 회차는 그대로다
+- [ ] 판정 순서: 404 → 휴강이면 422 SLOT_CANCELED → 시작했으면 422 CLASS_STARTED → 새 시각이 지금 이전이거나 반복 회차에 `date`를 보냈으면 400 → 예약이 있으면(`taken > 0`) 422 SLOT_HAS_BOOKINGS → 같은 시각 수업이 있으면 409 SLOT_TIME_TAKEN
+
+### AC-19. 휴강은 슬롯을 남기고 되돌릴 수 없다
+
+근거: PRD-0001 AC 2.3.4, Q21
+
+- [ ] `POST /instructor/slots/{id}/cancel`은 `canceled_at`을 채우고 200 `SlotDetail`을 준다. 행은 지우지 않는다
+- [ ] 이미 휴강이면 200이고 `canceled_at`이 바뀌지 않는다. 시작한 수업이면 422 CLASS_STARTED
+- [ ] 휴강을 되돌리는 API는 없다. 예약 취소 · 횟수 복구는 기능 0003에서 붙는다
+
+### AC-20. 일회성 수업은 지금 이후 · 오픈 범위 안에 열고 날짜까지 옮길 수 있다
+
+근거: Q33
+
+- [ ] `POST /instructor/slots` `{ date, startTime, capacity }`는 `recurrence_id`가 없는 슬롯을 만들고 201 `SlotDetail`을 준다. 회차 생성은 돌지 않는다
+- [ ] 시작 시각이 지금 이전이거나 날짜가 오픈 범위 밖이거나 `capacity`가 1 ~ 50 밖이면 400이고 `fields`에 해당 필드를 준다
+- [ ] `PATCH /instructor/slots/{id}`는 일회성 수업이면 `date`도 받는다. 날짜와 `occurs_on`이 같이 바뀌고 새 날짜는 오픈 범위 안이어야 한다. 시각만 바꿀 때는 범위를 보지 않는다. 나머지는 AC-18의 판정 순서를 따른다
+
+### AC-21. 오픈 범위를 늘리면 같은 요청에서 늘어난 구간을 채운다
+
+근거: PRD-0001 AC 2.4.1 · 2.4.2, Q19
+
+- [ ] `GET /instructor/settings`는 `{ openRangeDays }`, `PATCH`는 7 ~ 28 밖이면 400
+- [ ] 늘리면 같은 트랜잭션에서 늘어난 구간의 회차를 만든다. 회차 생성이 실패하면 설정 변경도 저장되지 않는다
+- [ ] 줄이면 범위 밖 슬롯을 지우지 않는다
+
+### AC-22. 만료된 세션 행은 매일 자정에 지운다
+
+근거: Q36, BE-ADR-0003
+
+- [ ] 매일 0시(서울)에 `expires_at`이 지난 `auth_session` 행을 지운다. 로그아웃했지만 만료 전인 행 · 유효한 행은 남는다
+- [ ] 지운 세션의 쿠키로 요청하면 401이다
+
+### Phase 2 흐름
+
+```mermaid
+flowchart LR
+    R["규칙 등록 · 다시 켜기<br/>(AC-11 · AC-13)"] --> T["꺼진 규칙 회차 이어받기<br/>(AC-14)"] --> G["회차 생성<br/>오픈 범위 · 지금 이후 · 같은 시각 건너뜀<br/>(AC-12 · AC-15)"]
+    S["오픈 범위 늘리기<br/>(AC-21)"] -->|"OpenRangeExtended"| G
+    M["매일 0시 · 앱 시작<br/>(AC-16)"] --> G
+    M --> X["만료 세션 삭제<br/>(AC-22)"]
+    G --> DB[("class_slot")]
+    O["일회성 수업 등록 · 수정<br/>(AC-20)"] --> DB
+    E["회차 시각 변경 · 휴강<br/>(AC-18 · AC-19)"] --> DB
+    DB --> L["강사 슬롯 목록 · 상세<br/>(AC-17)"]
 ```
 
 ## 3. 기술 설계
@@ -280,7 +391,7 @@ CREATE TABLE setting (
 
 `instructor_identity_uk`가 PRD 1 AC 1.2.3("같은 카카오 계정으로 다시 로그인하면 새로 가입되지 않는다")의 물리적 표현이다. 가입은 `INSERT ... ON CONFLICT (provider, provider_user_id) DO NOTHING` 뒤 조회로 처리하면 동시에 두 번 눌러도 강사가 두 명 생기지 않는다.
 
-`cancel_deadline_hours`(취소 마감)는 기능 0005의 마이그레이션 004에서 붙는다.
+`cancel_deadline_hours`(취소 마감)는 기능 0005의 마이그레이션에서 붙는다(번호는 그 기능의 plan에서 정한다. V3 · V4는 이 기능 Phase 2가 쓴다).
 
 `setting`의 PK가 `instructor_id`이므로 강사당 정확히 1행이 강제된다. 가입과 같은 트랜잭션에서 기본값으로 1행을 만든다(PRD 1 AC 1.2.2).
 
@@ -379,7 +490,7 @@ CREATE UNIQUE INDEX class_slot_time_uidx
 - 시작 시각이 지금 이후이고, 날짜가 오픈 범위 `[오늘, 오늘 + N일)` 안이어야 만든다. 아니면 400
 - 같은 시각에 휴강 아닌 수업이 이미 있으면 409 SLOT_TIME_TAKEN(`class_slot_time_uidx`)
 - 휴강은 반복 회차와 같다(되돌릴 수 없음, 시작한 수업은 거부)
-- 수정은 반복 회차와 달리 **날짜도 바꿀 수 있다.** 반복 회차는 규칙의 요일을 따라야 하므로 시각만 바꾼다(PRD-0001 AC 2.3.2). 일회성 수업은 따를 규칙이 없다. 날짜를 바꾸면 `occurs_on`도 같이 바꾼다. 검사는 만들 때와 같고(지금 이후 · 오픈 범위 안 · 같은 시각 없음), 예약이 있으면 시각 변경과 같이 거부한다(SLOT_HAS_BOOKINGS)
+- 수정은 반복 회차와 달리 **날짜도 바꿀 수 있다.** 반복 회차는 규칙의 요일을 따라야 하므로 시각만 바꾼다(PRD-0001 AC 2.3.2). 일회성 수업은 따를 규칙이 없다. 날짜를 바꾸면 `occurs_on`도 같이 바꾸고, 새 날짜가 오픈 범위 안이어야 한다. 시각만 바꿀 때는 반복 회차와 같이 범위를 보지 않는다(범위를 줄여 범위 밖에 남은 수업도 시각은 고칠 수 있다). 지금 이후 · 같은 시각 없음 · 예약 없음(SLOT_HAS_BOOKINGS)은 반복 회차와 같다
 - 오픈 범위를 줄여 범위 밖에 남은 일회성 수업은 반복 회차와 같이 지우지 않는다(AC 2.4.2)
 
 **소유자는 `class_slot.instructor_id`로 직접 본다.** 일회성 수업은 `recurrence`가 없으므로 `recurrence`를 타고 소유자를 찾을 수 없다. 강사 · 회원 화면의 슬롯 쿼리는 `recurrence`를 조인하지 않고 `class_slot.instructor_id`로 거른다. `recurrence`를 inner join하면 일회성 수업이 결과에서 빠진다.
@@ -412,7 +523,7 @@ UPDATE class_slot s SET recurrence_id = $recurrenceId
 **슬롯 생성 쿼리.** 켜진 규칙마다 오픈 범위 `[오늘, 오늘 + N일)`([BE-ADR-0006](../../../decisions/0006-time-and-timezone.md))의 날짜 중 규칙 요일과 같은 날의 슬롯을 만든다. 이미 있는 회차는 건너뛴다.
 
 ```sql
--- $today: 실행 하나에서 한 번 구한 (now() AT TIME ZONE 'Asia/Seoul')::date. 수강권 주기 생성과 같은 값을 쓴다
+-- $today · $now: 실행 하나에서 애플리케이션 Clock으로 한 번 구한 서울 날짜와 순간(3.3 시각). 수강권 주기 생성과 같은 값을 쓴다
 INSERT INTO class_slot (instructor_id, recurrence_id, occurs_on, starts_at, capacity)
 SELECT r.instructor_id, r.id, d.day, d.starts_at, r.capacity     -- 정원은 생성 시점 값을 복사
   FROM recurrence r
@@ -425,7 +536,7 @@ SELECT r.instructor_id, r.id, d.day, d.starts_at, r.capacity     -- 정원은 �
  WHERE r.active
    AND (CAST($instructorId AS bigint) IS NULL OR r.instructor_id = $instructorId)   -- NULL이면 전체 강사
    AND extract(dow FROM d.day) = r.weekday                                        -- 둘 다 0 = 일요일
-   AND d.starts_at > now()                                                        -- 오늘 이미 지난 회차는 만들지 않는다
+   AND d.starts_at > $now                                                         -- 오늘 이미 지난 회차는 만들지 않는다
    AND NOT EXISTS (SELECT 1 FROM class_slot c                                     -- 그 시각에 행이 있으면 휴강이어도 건너뛴다
                     WHERE c.instructor_id = r.instructor_id AND c.starts_at = d.starts_at)
  ORDER BY r.id, d.day                                                             -- 동시 실행끼리 같은 순서로 넣는다
@@ -456,8 +567,8 @@ ON CONFLICT DO NOTHING;                                                         
 - 서버가 1대([BE-ADR-0015](../../../decisions/0015-hosting-lightsail.md))라 중복 실행을 막는 잠금은 두지 않는다. 두 번 돌아도 결과가 같다(AC 2.2.2)
 - 배치는 매번 오픈 범위 전체를 다시 본다. 빠진 날을 따로 기억하지 않아도 하루 실패한 뒤 다음 실행이 채운다
 - 자정 · 앱 시작 실행은 슬롯을 만든 뒤 월 정액 주기 생성([수강권 쓰기 경로](../../entitlement/write-paths.md) 2)을 이어서 돈다. 둘 다 같은 `$today`를 쓴다. 슬롯만 생기고 수강권 주기가 없으면 새로 열린 날짜를 예약할 때 NO_REMAINING이 된다
-- **모듈 방향.** `setting`은 `instructor` 모듈, 슬롯 생성은 `schedule` 모듈이다. `instructor`가 `schedule`을 부르면 의존 방향(`schedule → instructor`)이 뒤집혀 순환이 된다. 그래서 오픈 범위를 늘리는 `instructor`의 서비스는 `setting`을 UPDATE한 뒤 이벤트(`OpenRangeExtended(instructorId, today)`)만 발행하고, `schedule`이 그 이벤트를 받아 슬롯을 만든다. 같은 트랜잭션에서 즉시 채워야 하므로(AC 2.4.2) 동기 `@EventListener`로 받는다. 슬롯 생성이 실패하면 오픈 범위 변경도 롤백된다
-- 월 정액 주기도 같은 이벤트를 `entitlement`가 받아 그 강사의 회원들에 대해 같은 트랜잭션에서 만든다([수강권 쓰기 경로](../../entitlement/write-paths.md) 2). 슬롯만 늘고 주기가 없으면 다음 자정까지 늘어난 날짜의 수업이 보이는데 예약하면 NO_REMAINING이다. 두 리스너가 같은 `$today`를 쓰도록 이벤트에 `today`를 싣는다. 두 리스너는 서로 다른 테이블에 쓰므로 순서는 상관없다. 주기 생성은 월 정액마다 savepoint(트랜잭션 안에서 그 지점까지만 되돌리는 표시)를 두어, 한 건이 실패해도 오픈 범위 변경은 커밋된다
+- **모듈 방향.** `setting`은 `instructor` 모듈, 슬롯 생성은 `schedule` 모듈이다. `instructor`가 `schedule`을 부르면 의존 방향(`schedule → instructor`)이 뒤집혀 순환이 된다. 그래서 오픈 범위를 늘리는 `instructor`의 서비스는 `setting`을 UPDATE한 뒤 이벤트(`OpenRangeExtended(instructorId, today, now)`)만 발행하고, `schedule`이 그 이벤트를 받아 슬롯을 만든다. 같은 트랜잭션에서 즉시 채워야 하므로(AC 2.4.2) 동기 `@EventListener`로 받는다. 슬롯 생성이 실패하면 오픈 범위 변경도 롤백된다
+- 월 정액 주기도 같은 이벤트를 `entitlement`가 받아 그 강사의 회원들에 대해 같은 트랜잭션에서 만든다([수강권 쓰기 경로](../../entitlement/write-paths.md) 2). 슬롯만 늘고 주기가 없으면 다음 자정까지 늘어난 날짜의 수업이 보이는데 예약하면 NO_REMAINING이다. 두 리스너가 요청과 같은 `$today` · `$now`를 쓰도록 이벤트에 둘 다 싣는다. 리스너가 `Clock`을 다시 읽지 않는다. 두 리스너는 서로 다른 테이블에 쓰므로 순서는 상관없다. 주기 생성은 월 정액마다 savepoint(트랜잭션 안에서 그 지점까지만 되돌리는 표시)를 두어, 한 건이 실패해도 오픈 범위 변경은 커밋된다
 
 반복 주기는 매주로 고정돼 있다. 격주 · 월 n번째 주는 PRD 1의 범위 밖이다(인터뷰 7번). 넣게 되면 `recurrence`에 `interval_weeks`와 `anchor_date` 두 컬럼이 붙는다. 기존 행은 각각 1과 생성일로 채우면 되므로 나중에 넣어도 비용이 낮다.
 
@@ -850,6 +961,8 @@ VALUES ($instructorId, $newHash, now() + interval '14 days');
 
 세션 만료는 SQL의 `now()`로 계산한다(DB 시각). 테스트에서 14일 경과는 `expires_at`을 직접 과거로 바꿔 만든다. `Clock` 주입과 섞지 않는다(BE-ADR-0013 대가 절).
 
+시간표(Phase 2)는 반대로 애플리케이션 `Clock`(서울)에서 `today` · `now`를 한 번 구해 쿼리에 넘기고, SQL의 `now()`를 쓰지 않는다. 회차 생성 · 일회성 수업 검사 · 시작한 수업 판정 · 슬롯 목록의 "지금 이후"가 모두 같은 값을 써야 테스트가 `Clock`을 고정해 경계(오늘 지난 회차, 범위 끝 날)를 확인할 수 있다. 한 흐름에서 두 시각을 섞지 않는다. 세션 정리(AC-22)는 세션 쪽이라 `now()`다.
+
 ### 3.4 마이그레이션
 
 Phase 단위로 나눠 만든다. 번호는 Flyway 파일 이름 `V{번호}__{설명}.sql`이 된다(BE-ADR-0013).
@@ -858,7 +971,9 @@ Phase 단위로 나눠 만든다. 번호는 Flyway 파일 이름 `V{번호}__{�
 |---|---|---|
 | 1 | `instructor`, `setting`(`open_range_days`) | Phase 1 |
 | 2 | `auth_session` | Phase 1. 로그인 · 세션은 `auth` 모듈이라 파일을 나눴다(BE-ADR-0016) |
-| 3 ~ | `btree_gist` 확장, `recurrence`, `class_slot`, `member`, `member_link`, `subscription`, `entitlement` | Phase 2 이후. 단위는 그 Phase의 plan에서 정한다 |
+| 3 | `recurrence`, `class_slot` | Phase 2. `schedule` 모듈 |
+| 4 | `auth_session (expires_at)` 인덱스 | Phase 2. 만료 세션 삭제(AC-22)용. `auth` 모듈 파일 |
+| 5 ~ | `btree_gist` 확장, `member`, `member_link`, `subscription`, `entitlement` | Phase 3 이후. 단위는 그 Phase의 plan에서 정한다 |
 
 `cancel_deadline_hours`는 기능 0005의 마이그레이션에서 붙는다. 1차 배포에는 PRD 1 ~ 3이 함께 나간다.
 

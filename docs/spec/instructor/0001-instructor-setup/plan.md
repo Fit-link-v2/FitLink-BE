@@ -7,7 +7,8 @@
 | Phase | User Story | AC | 상태 |
 |---|---|---|---|
 | 1 | PRD-0001 US 1 가입 · 로그인 · 세션 | AC-1 ~ AC-10 | 진행 중 (1.10 완료, 끝난 뒤 확인 남음) |
-| 2 ~ | US 2 ~ 5 시간표 · 회원 · 수강권 · 링크 | AC-11 ~ (추가 예정) | 열린 질문 해소 후 작성 |
+| 2 | US 2 시간표 · 오픈 범위, 매일 자정 작업 | AC-11 ~ AC-22 | 계획 |
+| 3 ~ | US 3 ~ 5 회원 · 수강권 · 링크 | 추가 예정 | Phase 2 뒤 작성 |
 
 ### Phase 1 구조
 
@@ -180,3 +181,157 @@ flowchart LR
 
 - [ ] `./gradlew test` 전체 통과, `ModularityTests` 통과
 - [ ] local에서 카카오 앱으로 실제 로그인: `/auth/kakao` → 카카오 → 콜백 → `/me` 200 → 로그아웃 → `/me` 401
+
+## Phase 2: PRD-0001 US 2 — 시간표 · 오픈 범위 · 매일 자정 작업
+
+### Phase 2 구조
+
+```mermaid
+flowchart TB
+    subgraph config["config"]
+        CK["ClockConfig<br/>Clock (Asia/Seoul)"]
+        SCH["@EnableScheduling"]
+    end
+    subgraph schedule["schedule 모듈"]
+        subgraph sapi["api"]
+            RC["RecurrenceController<br/>/instructor/recurrences"]
+            SLC["SlotController<br/>/instructor/slots"]
+        end
+        subgraph sapp["application"]
+            RS["RecurrenceService<br/>등록 · 끄기 · 켜기"]
+            SS2["SlotService<br/>목록 · 상세 · 시각 변경 · 휴강 · 일회성"]
+            GEN["SlotGeneration<br/>이어받기 · 회차 생성"]
+            JOB["SlotJobs<br/>자정 · 앱 시작 · OpenRangeExtended 리스너"]
+        end
+        subgraph sinfra["infra"]
+            RR["RecurrenceRepository"]
+            SR2["SlotRepository<br/>class_slot SQL"]
+        end
+    end
+    subgraph instructor["instructor 모듈"]
+        STC["SettingController<br/>/instructor/settings"]
+        STS["SettingService<br/>변경 + OpenRangeExtended 발행"]
+    end
+    subgraph auth["auth 모듈"]
+        CLN["SessionCleanupJob<br/>자정 만료 세션 삭제"]
+    end
+    RC --> RS --> GEN
+    SLC --> SS2
+    JOB --> GEN
+    STC --> STS
+    STS -. "이벤트 (같은 트랜잭션)" .-> JOB
+    GEN --> SR2
+    RS --> RR
+    SS2 --> SR2
+    SR2 --> DB[("PostgreSQL")]
+    RR --> DB
+    CLN --> DB
+```
+
+- 의존 방향은 `schedule → instructor` 그대로다. `instructor`는 `OpenRangeExtended(instructorId, today, now)`를 발행만 하고 `schedule`을 모른다. 이벤트 record는 `instructor.application`에 둔다
+- 회차 생성 SQL은 `setting.open_range_days`를 JOIN으로 읽기만 한다. 쓰기는 `instructor`만 한다
+- 컨트롤러는 Phase 1처럼 `@AuthenticationPrincipal Long`으로 강사 id를 받는다
+- 자정 작업은 모듈마다 자기 `@Scheduled`를 갖는다. 월 정액 주기 생성(Phase 4 이후)이 "회차 생성 뒤 같은 `today`로" 붙을 자리는 그때 정한다
+
+### 시각 · 테스트 방식
+
+- `Clock` 빈(`Asia/Seoul`) 하나에서 `today` · `now`를 요청 · 작업 시작 때 한 번 구해 서비스 → 저장소 → SQL 파라미터로 넘긴다. 시간표 SQL은 `now()`를 쓰지 않는다(prd 3.3 시각)
+- 테스트는 공통 기반 클래스가 바꿀 수 있는 고정 `Clock`을 `@Primary`로 넣는다. 기본값은 고정 날짜(목요일 12:00 서울)이고 `@BeforeEach`에서 되돌린다. 컨텍스트 설정이 같아 Phase 1 테스트와 컨텍스트를 같이 쓴다
+- TRUNCATE 목록에 `recurrence` · `class_slot`을 더한다. 격리 테스트는 강사를 2명 만든다(BE-ADR-0013)
+- 예약(`booking`)은 아직 없으므로 SLOT_HAS_BOOKINGS는 `taken`을 SQL로 올려 만든다
+- 테스트 컨텍스트에서는 스케줄 실행을 끈다(`fitlink.scheduling.enabled=false`, `@EnableScheduling`을 둔 설정에 `@ConditionalOnProperty`). 자정을 넘겨 도는 CI에서 실제 cron이 테스트 도중 데이터를 바꾸지 않게 하려는 것이다. 작업은 테스트가 메서드를 직접 부른다
+- 세션 만료 테스트(AC-22)는 Phase 1처럼 DB 시각 기준으로 `expires_at`을 만든다. 고정 `Clock`과 섞지 않는다
+
+```mermaid
+flowchart LR
+    T21["2.1 스키마 · Clock"] --> T22["2.2 회차 생성"] --> T23["2.3 규칙 등록"] --> T24["2.4 끄기 · 켜기 · 이어받기"]
+    T22 --> T25["2.5 슬롯 목록 · 상세"] --> T26["2.6 시각 변경 · 휴강"] --> T27["2.7 일회성 수업"]
+    T22 --> T28["2.8 오픈 범위 설정"]
+    T22 --> T29["2.9 자정 · 앱 시작 작업"]
+    T24 & T27 & T28 & T29 --> T210["2.10 doc-sync"]
+```
+
+### 2.1 스키마 (V3) · Clock
+
+- [ ] RED: `[BE-0001 AC-12] 같은 recurrence_id · occurs_on 두 번째 INSERT는 class_slot_occurrence_uk 위반`
+- [ ] RED: `[BE-0001 AC-15] 같은 강사 · 같은 starts_at의 휴강 아닌 슬롯 두 번째 INSERT는 class_slot_time_uidx 위반, 휴강한 행과는 겹쳐도 된다`
+- [ ] RED: `[BE-0001 AC-11] 같은 강사 · 요일 · 시각의 켜진 규칙 두 번째 INSERT는 recurrence_slot_uidx 위반, 꺼진 규칙과는 겹쳐도 된다`
+- [ ] GREEN: `V3__schedule.sql`에 `recurrence` · `class_slot`(prd 3.1 DDL 그대로), `ClockConfig`, 테스트용 고정 `Clock`
+- [ ] REFACTOR: 테스트에서 강사 · 규칙 · 슬롯을 만드는 도우미(SQL 직접 INSERT) 정리
+
+### 2.2 회차 생성 (SlotGeneration · SlotRepository)
+
+- [ ] RED: `[BE-0001 AC-12] 목요일 12:00 · 14일에 화 20:00 규칙이면 다음 화요일 2개, 20:00+09:00, 정원 복사`
+- [ ] RED: `[BE-0001 AC-12] 화요일 21:00에 돌리면 오늘 회차는 없다`, `목요일 12:00 · 7일에 목 20:00 규칙이면 오늘 회차만 있고 다음 목요일은 없다`
+- [ ] RED: `[BE-0001 AC-16] 두 번 돌려도 행 수가 같고, 휴강 · 시각을 바꾼 회차가 다시 생기지 않는다`
+- [ ] RED: `[BE-0001 AC-16] 강사를 정하지 않으면 모든 강사의 회차를 만든다`
+- [ ] RED: `[BE-0001 AC-14] 꺼진 규칙의 회차 하나는 휴강 · 하나는 19:30일 때 같은 요일 · 시각 규칙을 켜면 이어받고 새 회차가 없다, 정원은 원래 값`
+- [ ] RED: `[BE-0001 AC-15] 다음 주 화 20:00 일회성 수업을 휴강한 뒤 화 20:00 규칙을 켜도 그 날짜에는 회차가 없다` (`NOT EXISTS`를 빼면 실패해야 한다)
+- [ ] GREEN: prd 3.1 시간표 절의 이어받기 UPDATE와 회차 생성 쿼리(`$today` · `$now` · `CAST($instructorId AS bigint)` · `NOT EXISTS` · `ORDER BY` · `ON CONFLICT DO NOTHING`)
+- [ ] REFACTOR: `today` · `now`를 묶은 값(예: `GenerationTime`)으로 한 번만 구하게
+
+### 2.3 규칙 등록 · 목록 `/instructor/recurrences`
+
+- [ ] RED: `[BE-0001 AC-11] [MON, WED] 20:00 · 8 → 201 items 2개`, `GET 목록은 월 → 일 · 시각 순, 다른 강사 규칙 없음`
+- [ ] RED: `[BE-0001 AC-11] weekdays 빈 · 중복, startTime 형식, capacity 0 · 51 → 400, 행 없음`
+- [ ] RED: `[BE-0001 AC-11] WED 20:00이 켜져 있으면 [MON, WED] → 409 RECURRENCE_DUPLICATE weekdays [WED], MON도 없음`
+- [ ] RED: `[BE-0001 AC-12] 등록 응답 뒤 오픈 범위 안 회차가 있다`
+- [ ] GREEN: `RecurrenceController` · `RecurrenceService`(한 트랜잭션: 겹침 확인 → INSERT → 이어받기 → 회차 생성). 동시 등록이 유니크에 걸리면 `recurrence_slot_uidx` → 409로 바꾼다(prd 3.2 공통 규칙)
+- [ ] REFACTOR: 제약 이름 → 에러 코드 대응을 한 곳으로(`class_slot_time_uidx` · `recurrence_slot_uidx`)
+
+### 2.4 규칙 끄기 · 다시 켜기 · 이어받기
+
+- [ ] RED: `[BE-0001 AC-13] 끄면 이미 만든 회차는 그대로, 하루 넘겨 생성해도 새 회차 없음`
+- [ ] RED: `[BE-0001 AC-13] 다시 켜면 응답 전에 회차가 생긴다`, `같은 시각 켜진 규칙이 있으면 409이고 active false 그대로`
+- [ ] RED: `[BE-0001 AC-14] A를 끄고 B 등록 → 이어받기, B를 끄고 A 켜기 → 다시 이어받기`, `늘어난 범위의 새 회차는 B 정원`
+- [ ] GREEN: `PATCH /instructor/recurrences/{id}`. 다른 강사 id는 404
+- [ ] REFACTOR: 등록과 다시 켜기의 "이어받기 → 생성"을 한 메서드로
+
+### 2.5 슬롯 목록 · 상세
+
+- [ ] RED: `[BE-0001 AC-17] 지금 이후 자기 슬롯만 시각 순, 지난 · 진행 중 · 다른 강사 슬롯 없음, openRangeDays`
+- [ ] RED: `[BE-0001 AC-17] 휴강 슬롯은 canceledAt과 함께, 범위를 줄인 뒤 범위 밖 슬롯도 들어 있다`
+- [ ] RED: `[BE-0001 AC-17] 상세: 반복 회차는 recurrence, 일회성은 null, 다른 강사 id는 404`
+- [ ] GREEN: `SlotController` · `SlotService`. 쿼리는 `class_slot.instructor_id`로 거르고 `recurrence`는 LEFT JOIN(일회성이 빠지지 않게)
+- [ ] REFACTOR: 응답 record(`SlotSummary` · `SlotDetail`) 정리
+
+### 2.6 회차 시각 변경 · 휴강
+
+- [ ] RED: `[BE-0001 AC-18] 19:30으로 바꾸면 그 슬롯만, occurs_on · 다른 주 회차 그대로`
+- [ ] RED: `[BE-0001 AC-18] 휴강 → SLOT_CANCELED, 시작 → CLASS_STARTED, 지난 시각 · date → 400, taken > 0 → SLOT_HAS_BOOKINGS, 같은 시각 → SLOT_TIME_TAKEN, 여러 개면 앞의 것`
+- [ ] RED: `[BE-0001 AC-19] 휴강하면 canceled_at, 다시 보내면 처음 값 그대로 200, 시작한 슬롯은 CLASS_STARTED`, `taken > 0이어도 휴강된다`
+- [ ] GREEN: 읽고 판정 → 조건부 UPDATE. 시각 변경은 `WHERE taken = 0 AND canceled_at IS NULL AND starts_at > $now`, 휴강은 `SET canceled_at = $now WHERE canceled_at IS NULL AND starts_at > $now`(예약이 있어도 휴강한다). 0행이면 다시 읽어 각자의 순서로 답한다. 휴강은 이미 휴강이면 200, 시작했으면 CLASS_STARTED
+- [ ] REFACTOR: 판정 순서를 한 메서드로(2.7과 같이 씀)
+
+### 2.7 일회성 수업
+
+- [ ] RED: `[BE-0001 AC-20] 등록 → 201, recurrence null, occurs_on = date`
+- [ ] RED: `[BE-0001 AC-20] 지난 시각 · 범위 밖 날짜 · capacity 0 · 51 → 400 fields`
+- [ ] RED: `[BE-0001 AC-15] 반복 회차와 같은 시각 → 409 SLOT_TIME_TAKEN, 휴강한 시각은 허용, 다른 강사는 같은 시각 허용`
+- [ ] RED: `[BE-0001 AC-20] PATCH date로 다른 날로 옮기면 starts_at · occurs_on 같이 바뀜, 새 날짜가 범위 밖이면 400`, `범위를 줄여 범위 밖에 남은 일회성 수업도 startTime만은 바뀐다`
+- [ ] GREEN: `POST /instructor/slots`, `PATCH`의 `date` 처리
+- [ ] REFACTOR: 등록 · 수정의 입력 검사 공유
+
+### 2.8 오픈 범위 설정 `/instructor/settings`
+
+- [ ] RED: `[BE-0001 AC-21] GET → 14, PATCH 6 · 29 → 400`
+- [ ] RED: `[BE-0001 AC-21] 14 → 28이면 응답 전에 15 ~ 28일째 회차가 있다`, `28 → 7이면 범위 밖 슬롯이 남는다`
+- [ ] RED: `[BE-0001 AC-21] 회차 생성이 실패하면 PATCH가 실패하고 open_range_days 그대로` (실패는 테스트 안에서 `class_slot`에 `CHECK (false) NOT VALID` 제약을 잠시 건다. `NOT VALID`라 이미 있는 회차는 검사하지 않고 새 INSERT만 실패한다. `finally`에서 지우고, `@BeforeEach`도 `DROP CONSTRAINT IF EXISTS`로 남은 것을 지운다. TRUNCATE는 제약을 지우지 않기 때문이다. 빈을 바꿔 끼우면 Spring 컨텍스트가 새로 떠서 피한다)
+- [ ] GREEN: `instructor`의 `SettingController` · `SettingService`(UPDATE 뒤 늘었을 때만 `OpenRangeExtended` 발행), `schedule`의 동기 `@EventListener`
+- [ ] REFACTOR: `ModularityTests`로 `instructor → schedule` 의존이 없는지 확인
+
+### 2.9 매일 자정 · 앱 시작 작업
+
+- [ ] RED: `[BE-0001 AC-16] 강사 2명, Clock을 하루 넘겨 전체 작업을 돌리면 두 강사 모두 범위 끝 날 회차가 생긴다`, `ApplicationReadyEvent를 발행하면 회차가 생긴다`(앱 시작 리스너가 실제로 이어져 있는지)
+- [ ] RED: `[BE-0001 AC-22] 만료 · 로그아웃 미만료 · 유효 세션 중 만료 행만 지워지고, 지운 쿠키는 401`
+- [ ] GREEN: `SlotJobs`(`@Scheduled(cron = "0 0 0 * * *", zone = "Asia/Seoul")` + `ApplicationReadyEvent`), `SessionCleanupJob`, `@EnableScheduling`, `V4__auth_session_expires_idx.sql`
+- [ ] REFACTOR: cron · zone 값이 AC와 같은지 확인하는 테스트(어노테이션 값을 읽음. 테스트에서는 스케줄 실행을 꺼 두므로). 작업 실패는 로그만 남기고 앱을 멈추지 않는다
+
+### 2.10 doc-sync
+
+- [ ] REFACTOR: 시간표 `POLICY.md` 규칙 절 · `data-model.md`, 강사 `POLICY.md`(오픈 범위), `overview.md`(자정 작업 · 이벤트), `feature.yaml` 상태
+
+## Phase 2 끝난 뒤 확인
+
+- [ ] `./gradlew test` 전체 통과, `ModularityTests` 통과
+- [ ] local에서 앱을 띄워 규칙 등록 → 슬롯 목록 → 시각 변경 · 휴강 → 일회성 수업 → 오픈 범위 변경을 curl로 한 번씩
