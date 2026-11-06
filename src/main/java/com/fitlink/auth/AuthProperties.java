@@ -9,7 +9,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties("fitlink.auth")
 public record AuthProperties(Kakao kakao, Cookie cookie) {
 
-	public record Kakao(String clientId, String redirectUri) {
+	public record Kakao(String clientId, String clientSecret, String redirectUri) {
 	}
 
 	// local은 SESSION · KAKAO-STATE, https 환경은 __Host-Http- 접두사를 붙인다
