@@ -1,8 +1,12 @@
 package com.fitlink.instructor.api;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.allOf;
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.startsWith;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -11,6 +15,7 @@ import com.fitlink.auth.infra.SessionRepository;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 
 class MeApiTests extends IntegrationTest {
@@ -60,6 +65,21 @@ class MeApiTests extends IntegrationTest {
 				.query(Boolean.class)
 				.single())
 			.isTrue();
+	}
+
+	@Test
+	void 인증된_요청은_SESSION_쿠키도_같은_값_Max_Age_14일로_다시_준다() throws Exception {
+		String sessionId = sessions.issue(instructor(null, null));
+
+		mockMvc.perform(get("/me").cookie(new Cookie("SESSION", sessionId)))
+			.andExpect(header().string(HttpHeaders.SET_COOKIE, allOf(startsWith("SESSION=" + sessionId + ";"),
+					containsString("Max-Age=1209600"), containsString("Path=/"), containsString("HttpOnly"))));
+	}
+
+	@Test
+	void 인증에_실패한_요청은_SESSION_쿠키를_다시_주지_않는다() throws Exception {
+		mockMvc.perform(get("/me").cookie(new Cookie("SESSION", "not-a-session")))
+			.andExpect(header().doesNotExist(HttpHeaders.SET_COOKIE));
 	}
 
 	@Test

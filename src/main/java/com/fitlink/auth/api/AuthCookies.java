@@ -13,6 +13,8 @@ import org.springframework.web.util.WebUtils;
 @Component
 class AuthCookies {
 
+	private static final Duration SESSION_MAX_AGE = Duration.ofDays(14);
+
 	private final String sessionName;
 
 	private final String stateName;
@@ -23,25 +25,40 @@ class AuthCookies {
 	}
 
 	Optional<String> sessionId(HttpServletRequest request) {
-		return Optional.ofNullable(WebUtils.getCookie(request, sessionName)).map(Cookie::getValue);
+		return value(request, sessionName);
+	}
+
+	Optional<String> state(HttpServletRequest request) {
+		return value(request, stateName);
+	}
+
+	// 세션 만료(14일)와 같게 둔다. 브라우저를 닫아도 로그인이 유지된다
+	ResponseCookie session(String sessionId) {
+		return cookie(sessionName, sessionId, SESSION_MAX_AGE);
 	}
 
 	// 같은 이름 · Path로 Max-Age=0을 보내야 브라우저가 지운다
 	ResponseCookie expiredSession() {
-		return ResponseCookie.from(sessionName, "")
-			.maxAge(0)
-			.path("/")
-			.httpOnly(true)
-			.secure(true)
-			.sameSite("Lax")
-			.build();
+		return cookie(sessionName, "", Duration.ZERO);
+	}
+
+	ResponseCookie expiredState() {
+		return cookie(stateName, "", Duration.ZERO);
 	}
 
 	// 카카오에서 돌아오는 콜백은 다른 사이트에서 오는 top-level GET이라 SameSite=Lax여야 쿠키가 따라온다.
 	// 로그인을 10분 안에 끝내지 않으면 사라진다
 	ResponseCookie state(String state) {
-		return ResponseCookie.from(stateName, state)
-			.maxAge(Duration.ofMinutes(10))
+		return cookie(stateName, state, Duration.ofMinutes(10));
+	}
+
+	private static Optional<String> value(HttpServletRequest request, String name) {
+		return Optional.ofNullable(WebUtils.getCookie(request, name)).map(Cookie::getValue);
+	}
+
+	private static ResponseCookie cookie(String name, String value, Duration maxAge) {
+		return ResponseCookie.from(name, value)
+			.maxAge(maxAge)
 			.path("/")
 			.httpOnly(true)
 			.secure(true)

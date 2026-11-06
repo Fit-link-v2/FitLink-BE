@@ -74,8 +74,8 @@ criteria:
     source: [PRD-0001 AC 1.1.6]
     description: "세션은 마지막 요청으로부터 14일 유지되고 요청마다 연장된다"
     type: behavior
-    layers: [schema, test]
-    assertion: "인증된 요청 뒤 expires_at이 요청 시각 + 14일(오차 1분 이내)이다. expires_at이 지난 세션의 쿠키는 401이다"
+    layers: [schema, api, test]
+    assertion: "인증된 요청 뒤 expires_at이 요청 시각 + 14일(오차 1분 이내)이다. 그 응답은 SESSION 쿠키를 같은 값 · Max-Age=1209600으로 다시 준다. 인증에 실패한 요청은 SESSION 쿠키를 주지 않는다. expires_at이 지난 세션의 쿠키는 401이다"
     priority: must
     verify: machine
     status: active

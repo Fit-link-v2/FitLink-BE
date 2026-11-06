@@ -40,7 +40,7 @@ class KakaoRestClientTests {
 		kakao = MockRestServiceServer.bindTo(builder).build();
 		client = new KakaoRestClient(builder, new AuthProperties(
 				new AuthProperties.Kakao("client-1", "secret-1", "http://localhost:8080/auth/kakao/callback"),
-				new AuthProperties.Cookie("SESSION", "KAKAO-STATE")));
+				new AuthProperties.Cookie("SESSION", "KAKAO-STATE"), "http://app/", "http://app/?login=failed"));
 	}
 
 	@Test
@@ -89,9 +89,12 @@ class KakaoRestClientTests {
 
 	@Test
 	void 토큰_요청이_4xx면_KakaoLoginException() {
-		kakao.expect(requestTo(TOKEN_URL)).andRespond(withBadRequest());
+		kakao.expect(requestTo(TOKEN_URL)).andRespond(withBadRequest().body("{\"error_description\":\"code-1\"}"));
 
-		assertThatThrownBy(() -> client.fetchUser("code-1")).isInstanceOf(KakaoLoginException.class);
+		assertThatThrownBy(() -> client.fetchUser("code-1")).isInstanceOf(KakaoLoginException.class)
+			.hasMessageContaining("HTTP 400")
+			.hasMessageNotContaining("code-1")
+			.hasNoCause();
 	}
 
 	@Test
