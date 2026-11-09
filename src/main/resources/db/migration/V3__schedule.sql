@@ -44,3 +44,6 @@ CREATE TABLE class_slot (
 -- 회원 화면이 "그 강사의 휴강 아닌 슬롯을 시각순으로" 읽는 인덱스도 겸한다.
 CREATE UNIQUE INDEX class_slot_time_uidx
   ON class_slot (instructor_id, starts_at) WHERE canceled_at IS NULL;
+
+-- 회차 생성이 휴강한 행까지 포함해 그 시각에 슬롯이 있는지 본다. 강사 슬롯 목록도 휴강을 포함해 읽는다.
+CREATE INDEX class_slot_owner_idx ON class_slot (instructor_id, starts_at);
