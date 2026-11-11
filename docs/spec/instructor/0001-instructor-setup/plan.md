@@ -7,7 +7,7 @@
 | Phase | User Story | AC | 상태 |
 |---|---|---|---|
 | 1 | PRD-0001 US 1 가입 · 로그인 · 세션 | AC-1 ~ AC-10 | 완료 |
-| 2 | US 2 시간표 · 오픈 범위, 매일 자정 작업 | AC-11 ~ AC-22 | 진행 중 (2.4 완료) |
+| 2 | US 2 시간표 · 오픈 범위, 매일 자정 작업 | AC-11 ~ AC-22 | 진행 중 (2.5 완료) |
 | 3 ~ | US 3 ~ 5 회원 · 수강권 · 링크 | 추가 예정 | Phase 2 뒤 작성 |
 
 ### Phase 1 구조
@@ -289,11 +289,11 @@ flowchart LR
 
 ### 2.5 슬롯 목록 · 상세
 
-- [ ] RED: `[BE-0001 AC-17] 지금 이후 자기 슬롯만 시각 순, 지난 · 진행 중 · 다른 강사 슬롯 없음, openRangeDays`
-- [ ] RED: `[BE-0001 AC-17] 휴강 슬롯은 canceledAt과 함께, 범위를 줄인 뒤 범위 밖 슬롯도 들어 있다`
-- [ ] RED: `[BE-0001 AC-17] 상세: 반복 회차는 recurrence, 일회성은 null, 다른 강사 id는 404`
-- [ ] GREEN: `SlotController` · `SlotService`. 쿼리는 `class_slot.instructor_id`로 거르고 `recurrence`는 LEFT JOIN(일회성이 빠지지 않게)
-- [ ] REFACTOR: 응답 record(`SlotSummary` · `SlotDetail`) 정리
+- [x] RED: `[BE-0001 AC-17] 지금 이후 자기 슬롯만 시각 순, 지난 · 진행 중 · 다른 강사 슬롯 없음, openRangeDays`
+- [x] RED: `[BE-0001 AC-17] 휴강 슬롯은 canceledAt과 함께, 범위를 줄인 뒤 범위 밖 슬롯도 들어 있다`
+- [x] RED: `[BE-0001 AC-17] 상세: 반복 회차는 recurrence, 일회성은 null, 다른 강사 id는 404`
+- [x] GREEN: `SlotController` · `SlotService`. 쿼리는 `class_slot.instructor_id`로 거르고 `recurrence`는 LEFT JOIN(일회성이 빠지지 않게) — 오픈 범위는 `instructor` 모듈의 `SettingService`로 읽는다(schedule → instructor 방향). 범위와 슬롯을 같은 시점으로 읽도록 목록은 REPEATABLE READ. "지금 이후"는 `starts_at > now`라 지금 막 시작한 수업은 빠진다. 시각은 DB가 UTC로 돌려줄 수 있어 응답에서 서울 시각(+09:00)으로 바꾼다. 경로 id가 숫자가 아니면 400
+- [x] REFACTOR: 응답 record(`SlotSummary` · `SlotDetail`) 정리 — 응답 record는 `SlotController` 안에 두고, `HH:mm` · 서울 시각 표기는 `ApiFormats` 한 곳으로 모았다(규칙 API와 함께 씀). 리뷰 반영: 설정 행이 없을 때 원인이 보이는 예외, 상세도 readOnly 트랜잭션. 조건을 하나씩 깨면 테스트가 실패하는 것 확인
 
 ### 2.6 회차 시각 변경 · 휴강
 
