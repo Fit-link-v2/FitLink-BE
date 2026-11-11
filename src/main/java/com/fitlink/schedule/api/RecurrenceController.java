@@ -10,7 +10,6 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import java.time.LocalTime;
-import java.time.format.DateTimeFormatter;
 import java.util.HashSet;
 import java.util.List;
 import org.springframework.http.HttpStatus;
@@ -27,8 +26,6 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/instructor/recurrences")
 class RecurrenceController {
-
-	private static final DateTimeFormatter HH_MM = DateTimeFormatter.ofPattern("HH:mm");
 
 	private final RecurrenceService recurrences;
 
@@ -72,7 +69,7 @@ class RecurrenceController {
 	record RecurrenceView(long id, Weekday weekday, String startTime, int capacity, boolean active) {
 
 		static RecurrenceView of(Recurrence recurrence) {
-			return new RecurrenceView(recurrence.id(), recurrence.weekday(), recurrence.startTime().format(HH_MM),
+			return new RecurrenceView(recurrence.id(), recurrence.weekday(), ApiFormats.hhmm(recurrence.startTime()),
 					recurrence.capacity(), recurrence.active());
 		}
 
