@@ -1,5 +1,6 @@
 package com.fitlink.config;
 
+import jakarta.servlet.DispatcherType;
 import com.fitlink.auth.api.SessionAuthenticationFilter;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
@@ -32,6 +33,8 @@ class SecurityConfig {
 			.addFilterBefore(sessionFilter, AnonymousAuthenticationFilter.class)
 			.addFilterAfter(new CsrfHeaderFilter(errors), AuthorizationFilter.class)
 			.authorizeHttpRequests(auth -> auth
+				// 처리되지 않은 예외가 /error로 다시 들어올 때는 세션 필터가 돌지 않는다. 막으면 500이 401로 바뀐다
+				.dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
 				.requestMatchers("/actuator/health").permitAll()
 				.requestMatchers(HttpMethod.GET, "/auth/kakao", "/auth/kakao/callback").permitAll()
 				.requestMatchers(HttpMethod.POST, "/auth/logout").permitAll()
