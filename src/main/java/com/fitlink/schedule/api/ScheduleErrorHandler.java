@@ -1,5 +1,6 @@
 package com.fitlink.schedule.api;
 
+import com.fitlink.schedule.application.NotFoundException;
 import com.fitlink.schedule.application.RecurrenceDuplicateException;
 import java.util.List;
 import java.util.Map;
@@ -10,6 +11,7 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import tools.jackson.core.JacksonException;
 
 // 시간표 API의 예외를 에러 코드로 바꾼다. DB 제약 위반은 SQLState가 아니라 제약 이름으로 고르고, 대응표에 없으면 500으로 둔다
@@ -56,6 +58,17 @@ class ScheduleErrorHandler {
 			}
 		}
 		return badRequest(List.of(new ApiError.FieldProblem(field, "형식이 맞지 않는다")));
+	}
+
+	// 경로의 id가 숫자가 아니다
+	@ExceptionHandler
+	ResponseEntity<ApiError> invalid(MethodArgumentTypeMismatchException e) {
+		return badRequest(List.of(new ApiError.FieldProblem(e.getName(), "형식이 맞지 않는다")));
+	}
+
+	@ExceptionHandler
+	ResponseEntity<ApiError> notFound(NotFoundException e) {
+		return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiError.of("NOT_FOUND", e.getMessage()));
 	}
 
 	@ExceptionHandler
