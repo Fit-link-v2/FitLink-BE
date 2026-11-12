@@ -1,4 +1,4 @@
-package com.fitlink.auth;
+package com.fitlink.auth.config;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
