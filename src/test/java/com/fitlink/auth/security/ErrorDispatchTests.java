@@ -1,4 +1,4 @@
-package com.fitlink.config;
+package com.fitlink.auth.security;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
