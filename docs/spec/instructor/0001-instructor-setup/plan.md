@@ -7,7 +7,7 @@
 | Phase | User Story | AC | 상태 |
 |---|---|---|---|
 | 1 | PRD-0001 US 1 가입 · 로그인 · 세션 | AC-1 ~ AC-10 | 완료 |
-| 2 | US 2 시간표 · 오픈 범위, 매일 자정 작업 | AC-11 ~ AC-22 | 진행 중 (2.2 완료) |
+| 2 | US 2 시간표 · 오픈 범위, 매일 자정 작업 | AC-11 ~ AC-22 | 진행 중 (2.3 완료) |
 | 3 ~ | US 3 ~ 5 회원 · 수강권 · 링크 | 추가 예정 | Phase 2 뒤 작성 |
 
 ### Phase 1 구조
@@ -272,12 +272,12 @@ flowchart LR
 
 ### 2.3 규칙 등록 · 목록 `/instructor/recurrences`
 
-- [ ] RED: `[BE-0001 AC-11] [MON, WED] 20:00 · 8 → 201 items 2개`, `GET 목록은 월 → 일 · 시각 순, 다른 강사 규칙 없음`
-- [ ] RED: `[BE-0001 AC-11] weekdays 빈 · 중복, startTime 형식, capacity 0 · 51 → 400, 행 없음`
-- [ ] RED: `[BE-0001 AC-11] WED 20:00이 켜져 있으면 [MON, WED] → 409 RECURRENCE_DUPLICATE weekdays [WED], MON도 없음`
-- [ ] RED: `[BE-0001 AC-12] 등록 응답 뒤 오픈 범위 안 회차가 있다`
-- [ ] GREEN: `RecurrenceController` · `RecurrenceService`(한 트랜잭션: 겹침 확인 → INSERT → 이어받기 → 회차 생성). 동시 등록이 유니크에 걸리면 `recurrence_slot_uidx` → 409로 바꾼다(prd 3.2 공통 규칙)
-- [ ] REFACTOR: 제약 이름 → 에러 코드 대응을 한 곳으로(`class_slot_time_uidx` · `recurrence_slot_uidx`)
+- [x] RED: `[BE-0001 AC-11] [MON, WED] 20:00 · 8 → 201 items 2개`, `GET 목록은 월 → 일 · 시각 순, 다른 강사 규칙 없음`
+- [x] RED: `[BE-0001 AC-11] weekdays 빈 · 중복, startTime 형식, capacity 0 · 51 → 400, 행 없음`
+- [x] RED: `[BE-0001 AC-11] WED 20:00이 켜져 있으면 [MON, WED] → 409 RECURRENCE_DUPLICATE weekdays [WED], MON도 없음`
+- [x] RED: `[BE-0001 AC-12] 등록 응답 뒤 오픈 범위 안 회차가 있다`
+- [x] GREEN: `RecurrenceController` · `RecurrenceService`(한 트랜잭션: 겹침 확인 → INSERT → 이어받기 → 회차 생성). 동시 등록이 유니크에 걸리면 `recurrence_slot_uidx` → 409로 바꾼다(prd 3.2 공통 규칙) — 요일 이름 ↔ DB 번호(0 = 일요일) 변환은 `Weekday` enum 한 곳. 시각은 `@JsonFormat(pattern = "HH:mm")`라 `8:00` · `20:00:00` · `25:00`은 400. 모르는 요일 · 시각 형식 오류는 Jackson 예외 경로에서 필드 이름을 찾는다. 꺼진 같은 요일 · 시각 규칙과는 겹치지 않고 남은 회차를 이어받는 API 테스트를 더함. 조건을 하나씩 깨면 테스트가 실패하는 것 확인
+- [x] REFACTOR: 제약 이름 → 에러 코드 대응을 한 곳으로(`class_slot_time_uidx` · `recurrence_slot_uidx`) — `schedule.api`의 `ScheduleErrorHandler`. 모듈마다 `api`가 에러 코드를 바꾼다(BE-ADR-0011). 대응표에 없는 제약은 그대로 던져 500. 경합 재현이 어려워 처리기를 직접 부르는 테스트로 확인. 리뷰 반영: 요일 목록의 `null` 원소 400, 정수 필드의 소수 거부(`accept-float-as-int: false`), 등록 응답도 월요일부터 정렬, 규칙 중복 응답을 한 곳에서 생성. 처리되지 않은 예외가 `/error`로 다시 들어올 때 인증을 요구해 500이 401로 보이던 문제(Phase 1부터)는 main 대상 별도 PR에서 `config`의 ERROR 디스패치 허용으로 고침
 
 ### 2.4 규칙 끄기 · 다시 켜기 · 이어받기
 
