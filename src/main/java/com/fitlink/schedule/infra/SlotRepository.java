@@ -17,7 +17,7 @@ public class SlotRepository {
 
 	// 일회성 수업은 규칙이 없어 LEFT JOIN이다. 규칙의 instructor_id가 아니라 슬롯의 것으로 거른다
 	private static final String SELECT_SLOT = """
-			SELECT c.id, c.starts_at, c.capacity, c.taken, c.canceled_at,
+			SELECT c.id, c.occurs_on, c.starts_at, c.capacity, c.taken, c.canceled_at,
 			       r.id AS rule_id, r.weekday AS rule_weekday, r.start_time AS rule_start_time
 			  FROM class_slot c
 			  LEFT JOIN recurrence r ON r.id = c.recurrence_id
@@ -110,6 +110,21 @@ public class SlotRepository {
 			.optional();
 	}
 
+	// 읽고 판정한 뒤 다른 요청이 끼어들 수 있어, 판정한 조건을 WHERE에 다시 건다. 바꿨으면 true.
+	// 같은 시각에 휴강 아닌 수업이 있으면 class_slot_time_uidx 위반으로 DuplicateKeyException이 난다
+	public boolean changeTime(long instructorId, long id, OffsetDateTime startsAt, OffsetDateTime now) {
+		return jdbc.sql("""
+				UPDATE class_slot SET starts_at = :startsAt
+				 WHERE id = :id AND instructor_id = :instructorId
+				   AND canceled_at IS NULL AND starts_at > :now AND taken = 0
+				""")
+			.param("startsAt", startsAt)
+			.param("id", id)
+			.param("instructorId", instructorId)
+			.param("now", now)
+			.update() == 1;
+	}
+
 	// 예약이 있어도 휴강한다. 행은 지우지 않아 회차 생성이 그 날을 다시 채우지 않는다. 바꿨으면 true
 	public boolean cancel(long instructorId, long id, OffsetDateTime now) {
 		return jdbc.sql("""
@@ -128,7 +143,8 @@ public class SlotRepository {
 		Slot.Rule rule = rs.wasNull() ? null
 				: new Slot.Rule(ruleId, Weekday.ofDow(rs.getInt("rule_weekday")),
 						rs.getObject("rule_start_time", LocalTime.class));
-		return new Slot(rs.getLong("id"), rs.getObject("starts_at", OffsetDateTime.class), rs.getInt("capacity"),
+		return new Slot(rs.getLong("id"), rs.getObject("occurs_on", LocalDate.class),
+				rs.getObject("starts_at", OffsetDateTime.class), rs.getInt("capacity"),
 				rs.getInt("taken"), rs.getObject("canceled_at", OffsetDateTime.class), rule);
 	}
 

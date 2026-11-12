@@ -14,6 +14,8 @@ class SlotRepositoryTests extends IntegrationTest {
 
 	static final OffsetDateTime NOW = OffsetDateTime.parse("2026-11-12T12:00:00+09:00");
 
+	static final OffsetDateTime LATER = OffsetDateTime.parse("2026-11-13T10:00:00+09:00");
+
 	@Autowired
 	SlotRepository slots;
 
@@ -25,6 +27,23 @@ class SlotRepositoryTests extends IntegrationTest {
 	void 강사() {
 		given = new ScheduleFixtures(jdbc);
 		instructorId = given.instructor("1001");
+	}
+
+	@Test
+	void 시각_변경은_휴강했거나_예약이_있거나_시작한_슬롯과_다른_강사의_슬롯을_바꾸지_않는다() {
+		long canceled = given.slot(instructorId, null, "2026-11-13", "2026-11-13T09:00:00+09:00",
+				"2026-11-12T10:00:00+09:00");
+		long booked = given.slot(instructorId, null, "2026-11-13", "2026-11-13T08:00:00+09:00", null);
+		jdbc.sql("UPDATE class_slot SET taken = 1 WHERE id = :id").param("id", booked).update();
+		long started = given.slot(instructorId, null, "2026-11-12", "2026-11-12T12:00:00+09:00", null);
+		long others = given.slot(given.instructor("2002"), null, "2026-11-13", "2026-11-13T09:00:00+09:00", null);
+		long open = given.slot(instructorId, null, "2026-11-13", "2026-11-13T07:00:00+09:00", null);
+
+		assertThat(slots.changeTime(instructorId, canceled, LATER, NOW)).isFalse();
+		assertThat(slots.changeTime(instructorId, booked, LATER, NOW)).isFalse();
+		assertThat(slots.changeTime(instructorId, started, LATER, NOW)).isFalse();
+		assertThat(slots.changeTime(instructorId, others, LATER, NOW)).isFalse();
+		assertThat(slots.changeTime(instructorId, open, LATER, NOW)).isTrue();
 	}
 
 	@Test

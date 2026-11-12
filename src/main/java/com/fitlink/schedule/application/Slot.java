@@ -1,11 +1,13 @@
 package com.fitlink.schedule.application;
 
+import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
 
-// 강사가 보는 슬롯 하나. 휴강이면 canceledAt이 있고, 일회성 수업이면 recurrence가 null이다
-public record Slot(long id, OffsetDateTime startsAt, int capacity, int taken, OffsetDateTime canceledAt,
-		Rule recurrence) {
+// 강사가 보는 슬롯 하나. 휴강이면 canceledAt이 있고, 일회성 수업이면 recurrence가 null이다.
+// occursOn은 수업 날짜(서울)다. 시각을 바꿔도 이 날 안에서 바뀐다
+public record Slot(long id, LocalDate occursOn, OffsetDateTime startsAt, int capacity, int taken,
+		OffsetDateTime canceledAt, Rule recurrence) {
 
 	boolean canceled() {
 		return canceledAt != null;
