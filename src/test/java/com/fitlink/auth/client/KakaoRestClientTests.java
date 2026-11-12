@@ -2,7 +2,6 @@ package com.fitlink.auth.client;
 
 import com.fitlink.auth.config.AuthProperties;
 import com.fitlink.auth.exception.KakaoLoginException;
-import com.fitlink.instructor.model.KakaoUser;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;

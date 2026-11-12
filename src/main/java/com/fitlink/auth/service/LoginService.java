@@ -1,9 +1,10 @@
 package com.fitlink.auth.service;
 
 import com.fitlink.auth.client.KakaoOAuthClient;
+import com.fitlink.auth.client.KakaoUser;
 import com.fitlink.auth.repository.SessionRepository;
-import com.fitlink.instructor.model.KakaoUser;
-import com.fitlink.instructor.service.InstructorService;
+import com.fitlink.instructor.InstructorFacade;
+import com.fitlink.instructor.InstructorSignUpCommand;
 import java.util.Optional;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -13,13 +14,13 @@ public class LoginService {
 
 	private final KakaoOAuthClient kakao;
 
-	private final InstructorService instructors;
+	private final InstructorFacade instructors;
 
 	private final SessionRepository sessions;
 
 	private final TransactionTemplate transaction;
 
-	LoginService(KakaoOAuthClient kakao, InstructorService instructors, SessionRepository sessions,
+	LoginService(KakaoOAuthClient kakao, InstructorFacade instructors, SessionRepository sessions,
 			TransactionTemplate transaction) {
 		this.kakao = kakao;
 		this.instructors = instructors;
@@ -32,7 +33,8 @@ public class LoginService {
 	public String login(String code, Optional<String> previousSessionId) {
 		KakaoUser user = kakao.fetchUser(code);
 		return transaction.execute(status -> {
-			long instructorId = instructors.signUpOrFind(user);
+			long instructorId = instructors
+				.signUpOrFind(new InstructorSignUpCommand(user.id(), user.nickname(), user.email()));
 			previousSessionId.ifPresent(sessions::revoke);
 			return sessions.issue(instructorId);
 		});

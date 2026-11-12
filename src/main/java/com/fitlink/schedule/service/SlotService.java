@@ -1,6 +1,6 @@
 package com.fitlink.schedule.service;
 
-import com.fitlink.instructor.service.SettingService;
+import com.fitlink.instructor.InstructorFacade;
 import com.fitlink.schedule.exception.InvalidRequestException;
 import com.fitlink.schedule.exception.NotFoundException;
 import com.fitlink.schedule.exception.SlotRejectedException;
@@ -26,13 +26,13 @@ public class SlotService {
 
 	private final SlotRepository slots;
 
-	private final SettingService settings;
+	private final InstructorFacade instructors;
 
 	private final Clock clock;
 
-	SlotService(SlotRepository slots, SettingService settings, Clock clock) {
+	SlotService(SlotRepository slots, InstructorFacade instructors, Clock clock) {
 		this.slots = slots;
-		this.settings = settings;
+		this.instructors = instructors;
 		this.clock = clock;
 	}
 
@@ -41,7 +41,7 @@ public class SlotService {
 	// 오픈 범위와 슬롯을 두 번 읽으므로 같은 시점을 보도록 REPEATABLE READ로 묶는다
 	@Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
 	public UpcomingSlots upcoming(long instructorId) {
-		return new UpcomingSlots(settings.openRangeDays(instructorId),
+		return new UpcomingSlots(instructors.openRangeDays(instructorId),
 				slots.findUpcoming(instructorId, OffsetDateTime.now(clock)));
 	}
 

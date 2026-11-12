@@ -2,7 +2,6 @@ package com.fitlink.auth.client;
 
 import com.fitlink.auth.config.AuthProperties;
 import com.fitlink.auth.exception.KakaoLoginException;
-import com.fitlink.instructor.model.KakaoUser;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.net.http.HttpClient;
 import java.time.Duration;

@@ -9,7 +9,6 @@ import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.util.Optional;
 import org.springframework.http.HttpHeaders;
-import org.springframework.modulith.NamedInterface;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.AuthorityUtils;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -19,10 +18,8 @@ import org.springframework.web.filter.OncePerRequestFilter;
 /**
  * 세션 쿠키가 유효하면 강사 id를 인증 정보로 채운다. 401은 직접 보내지 않고 Security 허용 규칙이 정한다.
  * 그래야 인증이 필요 없는 경로는 쿠키가 틀려도 그대로 통과한다.
- * {@code config}가 Security 필터 체인에 끼우므로 이 클래스만 다른 모듈에 공개한다.
  */
 @Component
-@NamedInterface("session-filter")
 public class SessionAuthenticationFilter extends OncePerRequestFilter {
 
 	private final SessionService sessions;

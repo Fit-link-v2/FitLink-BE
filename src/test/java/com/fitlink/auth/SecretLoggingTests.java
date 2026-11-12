@@ -3,7 +3,7 @@ package com.fitlink.auth;
 import com.fitlink.IntegrationTest;
 import com.fitlink.auth.client.FakeKakaoServer;
 import com.fitlink.auth.config.AuthProperties;
-import com.fitlink.instructor.model.KakaoUser;
+import com.fitlink.auth.client.KakaoUser;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
