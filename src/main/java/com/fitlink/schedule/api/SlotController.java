@@ -8,6 +8,7 @@ import java.util.List;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -30,6 +31,11 @@ class SlotController {
 	@GetMapping("/{id}")
 	SlotDetail detail(@AuthenticationPrincipal Long instructorId, @PathVariable long id) {
 		return SlotDetail.of(slots.detail(instructorId, id));
+	}
+
+	@PostMapping("/{id}/cancel")
+	SlotDetail cancel(@AuthenticationPrincipal Long instructorId, @PathVariable long id) {
+		return SlotDetail.of(slots.cancel(instructorId, id));
 	}
 
 	record SlotList(int openRangeDays, List<SlotSummary> items) {
