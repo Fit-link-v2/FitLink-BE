@@ -29,7 +29,7 @@ BE-ADR-0011은 모듈 안을 `api` · `application` · `infra` 세 패키지로 
    | `model` | 도메인 값(record · enum) |
    | `repository` | SQL. BE-ADR-0012의 "SQL은 `infra`에만"은 "SQL은 `repository`에만"으로 읽는다 |
    | `exception` | 모듈의 에러 코드와 예외 |
-   | `client` · `security` · `config` | 외부 API 호출 · Security 설정과 필터 · 설정값. 필요한 모듈만 둔다 |
+   | `client` · `filter` · `config` | 외부 API 호출 · 서블릿 필터 · 설정. 필요한 모듈만 둔다 |
 
 2. 다른 모듈은 **모듈 루트의 `{모듈}Facade` 하나만** 부른다
    - Spring Modulith는 모듈 루트 패키지의 public 타입만 밖에 연다. 하위 폴더는 모두 숨겨지므로 `@NamedInterface`를 쓰지 않는다
@@ -40,10 +40,10 @@ BE-ADR-0011은 모듈 안을 `api` · `application` · `infra` 세 패키지로 
    - `@ApplicationModule(type = OPEN)`으로 하위 폴더까지 연다
    - 넣을 수 있는 것: 시계 설정, 에러 응답 모양과 공통 에러 처리, 로그인 강사 id 꺼내기. 이 목록 밖의 것은 넣지 않는다
    - `common`은 다른 모듈에 의존하지 않는다
-4. Security 설정과 필터는 `auth` 모듈 안(`auth/security`)에 둔다. 세션 필터를 다른 모듈에 열 필요가 없어진다
+4. Security 설정은 `auth` 모듈 안(`auth/config`)에 둔다. 세션 필터를 다른 모듈에 열 필요가 없어진다
 5. 호출 방향은 리뷰가 아니라 테스트로 지킨다
    - 모듈 사이: Spring Modulith `verify()`(BE-ADR-0011)
-   - 모듈 안: ArchUnit 테스트(`ArchitectureTests`). `controller` → `service` → `repository` 방향, `dto`는 `controller`만, Facade는 다른 모듈의 `service`만 부름, `common`은 다른 모듈을 모름, 모듈 루트에는 모듈 이름으로 시작하는 `Facade` · `Command` · `Info`만, 역할 폴더끼리 순환 금지
+   - 모듈 안: ArchUnit 테스트. `controller` → `service` → `repository` 방향, `dto`는 `controller`만, `common`은 다른 모듈을 모름, 모듈 루트에는 `Facade` · `Command` · `Info`만
 6. 여러 모듈의 테이블을 한 트랜잭션에서 바꾸는 동작(예약 · 휴강)은 가장 바깥 모듈의 `service`가 순서를 쥐고 다른 모듈의 Facade를 차례로 부른다. 구체적인 방식은 기능 0003 plan에서 정한다
 
 이 결정이 대체하는 것:

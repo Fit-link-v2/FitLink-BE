@@ -1,6 +1,6 @@
 package com.fitlink;
 
-import com.fitlink.auth.application.KakaoOAuthClient;
+import com.fitlink.auth.client.KakaoOAuthClient;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;

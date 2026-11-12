@@ -1,8 +1,8 @@
 package com.fitlink.instructor;
 
+import com.fitlink.IntegrationTest;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.fitlink.IntegrationTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DuplicateKeyException;
 
