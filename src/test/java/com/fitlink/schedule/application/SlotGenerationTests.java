@@ -17,7 +17,11 @@ import org.springframework.transaction.support.TransactionTemplate;
 // 시각은 테스트 시계 기본값(2026-11-12 목요일 12:00 서울) 기준이다. 오픈 범위 14일이면 11-26은 들어가지 않는다
 class SlotGenerationTests extends IntegrationTest {
 
+	static final int MONDAY = 1;
+
 	static final int TUESDAY = 2;
+
+	static final int WEDNESDAY = 3;
 
 	static final int THURSDAY = 4;
 
@@ -143,6 +147,143 @@ class SlotGenerationTests extends IntegrationTest {
 	}
 
 	@Test
+	void 꺼진_규칙의_휴강_시각_변경_회차를_같은_요일_시각의_규칙이_이어받고_새_회차는_없다() {
+		long a = given.recurrence(instructorId, TUESDAY, "20:00", 8, false);
+		given.slot(instructorId, a, NOV_17.toString(), "2026-11-17T20:00:00+09:00", "2026-11-13T09:00:00+09:00");
+		given.slot(instructorId, a, NOV_24.toString(), "2026-11-24T19:30:00+09:00", null);
+		long b = given.recurrence(instructorId, TUESDAY, "20:00", 10, true);
+
+		generation.takeOverAndGenerate(List.of(b), instructorId, now());
+
+		assertThat(slots()).containsExactly(
+				new Row(b, NOV_17, Instant.parse("2026-11-17T11:00:00Z"), 8, true),
+				new Row(b, NOV_24, Instant.parse("2026-11-24T10:30:00Z"), 8, false));
+	}
+
+	@Test
+	void 이어받기_뒤_새로_열리는_날의_회차는_새_규칙의_정원을_쓴다() {
+		long a = given.recurrence(instructorId, TUESDAY, "20:00", 8, false);
+		given.slot(instructorId, a, NOV_17.toString(), "2026-11-17T20:00:00+09:00", null);
+		long b = given.recurrence(instructorId, TUESDAY, "20:00", 10, true);
+
+		generation.takeOverAndGenerate(List.of(b), instructorId, now());
+
+		assertThat(slots()).containsExactly(
+				new Row(b, NOV_17, Instant.parse("2026-11-17T11:00:00Z"), 8, false),
+				new Row(b, NOV_24, Instant.parse("2026-11-24T11:00:00Z"), 10, false));
+	}
+
+	@Test
+	void 어제_이전_회차는_이어받지_않는다() {
+		long a = given.recurrence(instructorId, TUESDAY, "20:00", 8, false);
+		long past = given.slot(instructorId, a, "2026-11-10", "2026-11-10T20:00:00+09:00", null);
+		long b = given.recurrence(instructorId, TUESDAY, "20:00", 10, true);
+
+		generation.takeOverAndGenerate(List.of(b), instructorId, now());
+
+		assertThat(ruleOf(past)).isEqualTo(a);
+	}
+
+	@Test
+	void 시각이_다른_꺼진_규칙의_회차는_이어받지_않는다() {
+		long otherTime = given.recurrence(instructorId, TUESDAY, "19:00", 8, false);
+		long slot = given.slot(instructorId, otherTime, NOV_17.toString(), "2026-11-17T19:00:00+09:00", null);
+		long b = given.recurrence(instructorId, TUESDAY, "20:00", 10, true);
+
+		generation.takeOverAndGenerate(List.of(b), instructorId, now());
+
+		assertThat(ruleOf(slot)).isEqualTo(otherTime);
+	}
+
+	@Test
+	void 요일이_다른_꺼진_규칙의_회차는_이어받지_않는다() {
+		long otherDay = given.recurrence(instructorId, THURSDAY, "20:00", 8, false);
+		long slot = given.slot(instructorId, otherDay, "2026-11-19", "2026-11-19T20:00:00+09:00", null);
+		long b = given.recurrence(instructorId, TUESDAY, "20:00", 10, true);
+
+		generation.takeOverAndGenerate(List.of(b), instructorId, now());
+
+		assertThat(ruleOf(slot)).isEqualTo(otherDay);
+	}
+
+	@Test
+	void 다른_강사의_꺼진_규칙은_이어받지_않는다() {
+		long otherId = given.instructor("2002");
+		long others = given.recurrence(otherId, TUESDAY, "20:00", 8, false);
+		long slot = given.slot(otherId, others, NOV_17.toString(), "2026-11-17T20:00:00+09:00", null);
+		long b = given.recurrence(instructorId, TUESDAY, "20:00", 10, true);
+
+		generation.takeOverAndGenerate(List.of(b), instructorId, now());
+
+		assertThat(ruleOf(slot)).isEqualTo(others);
+	}
+
+	@Test
+	void 다른_강사의_규칙_id를_넘기면_아무것도_옮기지_않는다() {
+		long otherId = given.instructor("2002");
+		long off = given.recurrence(otherId, TUESDAY, "20:00", 8, false);
+		long slot = given.slot(otherId, off, NOV_17.toString(), "2026-11-17T20:00:00+09:00", null);
+		long othersActive = given.recurrence(otherId, TUESDAY, "20:00", 10, true);
+
+		generation.takeOverAndGenerate(List.of(othersActive), instructorId, now());
+
+		assertThat(ruleOf(slot)).isEqualTo(off);
+	}
+
+	@Test
+	void 꺼진_규칙으로는_회차를_옮기지_않는다() {
+		long a = given.recurrence(instructorId, TUESDAY, "20:00", 8, false);
+		long slot = given.slot(instructorId, a, NOV_17.toString(), "2026-11-17T20:00:00+09:00", null);
+		long stillOff = given.recurrence(instructorId, TUESDAY, "20:00", 10, false);
+
+		generation.takeOverAndGenerate(List.of(stillOff), instructorId, now());
+
+		assertThat(ruleOf(slot)).isEqualTo(a);
+	}
+
+	// 규칙을 끄는 요청과 자정 실행이 겹치면 꺼진 규칙 둘이 같은 날 회차를 가질 수 있다
+	@Test
+	void 꺼진_규칙_둘이_같은_날_회차를_가져도_실패하지_않고_한_행만_옮긴다() {
+		long a = given.recurrence(instructorId, TUESDAY, "20:00", 8, false);
+		long b = given.recurrence(instructorId, TUESDAY, "20:00", 8, false);
+		given.slot(instructorId, a, NOV_17.toString(), "2026-11-17T19:30:00+09:00", null);
+		given.slot(instructorId, b, NOV_17.toString(), "2026-11-17T20:00:00+09:00", null);
+		long c = given.recurrence(instructorId, TUESDAY, "20:00", 10, true);
+
+		generation.takeOverAndGenerate(List.of(c), instructorId, now());
+
+		assertThat(slots()).filteredOn(row -> row.occursOn().equals(NOV_17))
+			.extracting(Row::recurrenceId)
+			.containsOnlyOnce(c);
+	}
+
+	@Test
+	void 이미_자기_회차가_있는_날의_꺼진_규칙_회차는_옮기지_않는다() {
+		long a = given.recurrence(instructorId, TUESDAY, "20:00", 8, false);
+		long moved = given.slot(instructorId, a, NOV_17.toString(), "2026-11-17T19:30:00+09:00", null);
+		long b = given.recurrence(instructorId, TUESDAY, "20:00", 10, true);
+		given.slot(instructorId, b, NOV_17.toString(), "2026-11-17T20:00:00+09:00", null);
+
+		generation.takeOverAndGenerate(List.of(b), instructorId, now());
+
+		assertThat(ruleOf(moved)).isEqualTo(a);
+	}
+
+	// 한 규칙의 회차 생성이 다른 규칙의 이어받기보다 먼저 돌면 그 날 회차가 이미 있어 이어받기가 유니크에 걸린다
+	@Test
+	void 규칙_여러_개를_함께_켜면_모두_이어받은_뒤_회차를_만든다() {
+		long offWednesday = given.recurrence(instructorId, WEDNESDAY, "20:00", 8, false);
+		long moved = given.slot(instructorId, offWednesday, "2026-11-18", "2026-11-18T19:30:00+09:00", null);
+		long monday = given.recurrence(instructorId, MONDAY, "20:00", 10, true);
+		long wednesday = given.recurrence(instructorId, WEDNESDAY, "20:00", 10, true);
+
+		generation.takeOverAndGenerate(List.of(monday, wednesday), instructorId, now());
+
+		assertThat(ruleOf(moved)).isEqualTo(wednesday);
+		assertThat(slots()).filteredOn(row -> row.occursOn().equals(LocalDate.of(2026, 11, 18))).hasSize(1);
+	}
+
+	@Test
 	void 휴강한_일회성_수업_시각에는_나중에_만든_규칙의_회차가_생기지_않는다() {
 		given.slot(instructorId, null, NOV_17.toString(), "2026-11-17T20:00:00+09:00", "2026-11-13T09:00:00+09:00");
 		long recurrenceId = given.recurrence(instructorId, TUESDAY, "20:00", 8, true);
@@ -168,6 +309,10 @@ class SlotGenerationTests extends IntegrationTest {
 
 	private GenerationTime now() {
 		return GenerationTime.at(clock);
+	}
+
+	private long ruleOf(long slotId) {
+		return jdbc.sql("SELECT recurrence_id FROM class_slot WHERE id = :id").param("id", slotId).query(Long.class).single();
 	}
 
 	private void cancel(LocalDate day) {

@@ -481,6 +481,9 @@ CREATE TABLE class_slot (
 -- 회원 화면이 "그 강사의 휴강 아닌 슬롯을 시각순으로" 읽는 인덱스도 겸한다.
 CREATE UNIQUE INDEX class_slot_time_uidx
   ON class_slot (instructor_id, starts_at) WHERE canceled_at IS NULL;
+
+-- 회차 생성이 휴강한 행까지 포함해 그 시각에 슬롯이 있는지 본다. 강사 슬롯 목록도 휴강을 포함해 읽는다.
+CREATE INDEX class_slot_owner_idx ON class_slot (instructor_id, starts_at);
 ```
 
 **같은 시각에 수업은 하나.** 규칙 회차 · 일회성 수업 · 시각을 바꾼 회차가 어떤 조합으로 겹치든 `class_slot_time_uidx`가 막는다. 휴강한 행은 빠지므로 휴강한 시각에는 새 수업을 열 수 있다. 일회성 수업 생성과 시각 변경이 이 유니크에 걸리면 409 SLOT_TIME_TAKEN이다. 슬롯 생성 쿼리는 걸리는 회차를 건너뛴다.
@@ -507,17 +510,29 @@ CREATE UNIQUE INDEX class_slot_time_uidx
 
 ```sql
 -- 규칙 INSERT(또는 다시 켜는 UPDATE) 뒤, 슬롯 생성 전. 같은 트랜잭션
-UPDATE class_slot s SET recurrence_id = $recurrenceId
-  FROM recurrence old
- WHERE s.recurrence_id = old.id
-   AND old.instructor_id = $instructorId
-   AND old.weekday = $weekday AND old.start_time = $startTime
-   AND NOT old.active
-   AND s.occurs_on >= $today;
+UPDATE class_slot SET recurrence_id = $recurrenceId
+ WHERE id IN (
+       SELECT DISTINCT ON (c.occurs_on) c.id
+         FROM class_slot c
+         JOIN recurrence old_rule ON old_rule.id = c.recurrence_id
+         JOIN recurrence new_rule
+           ON new_rule.instructor_id = old_rule.instructor_id
+          AND new_rule.weekday = old_rule.weekday
+          AND new_rule.start_time = old_rule.start_time
+        WHERE new_rule.id = $recurrenceId
+          AND new_rule.instructor_id = $instructorId
+          AND new_rule.active
+          AND NOT old_rule.active
+          AND c.occurs_on >= $today
+          AND NOT EXISTS (SELECT 1 FROM class_slot own
+                           WHERE own.recurrence_id = new_rule.id AND own.occurs_on = c.occurs_on)
+        ORDER BY c.occurs_on, c.id DESC
+       );
 ```
 
 - 정원은 바꾸지 않는다(BE-ADR-0005). 정원 8인 A를 끄고 정원 10인 B를 만들면 이어받은 회차는 8, B가 새로 만드는 회차부터 10이다
-- 이어받을 회차를 가진 꺼진 규칙은 많아야 하나다. 규칙이 켜질 때마다 그 시각의 미래 회차를 모두 가져가고, 켜진 규칙은 같은 요일 · 시각에 하나뿐이기 때문이다(`recurrence_slot_uidx`). 그래서 `(recurrence_id, occurs_on)` 유니크에 걸리지 않는다
+- 평소에는 이어받을 회차를 가진 꺼진 규칙이 하나다. 규칙이 켜질 때마다 그 시각의 미래 회차를 모두 가져가기 때문이다. 다만 규칙 끄기와 자정 실행이 겹치면 꺼진 규칙 둘이 같은 날 회차를 가질 수 있어, 날짜마다 한 행만 옮기고(`DISTINCT ON`) 이미 자기 회차가 있는 날은 건너뛴다. 그렇지 않으면 `(recurrence_id, occurs_on)` 유니크에 걸려 그 규칙을 켤 때마다 실패한다
+- 규칙을 여러 개 함께 등록하면 모두 이어받은 뒤 회차 생성을 한 번만 돈다. 먼저 돌면 아직 이어받지 않은 규칙의 회차가 그 날에 생겨 이어받기가 유니크에 걸린다
 - 복합 FK(`class_slot_recurrence_owner_fk`)는 같은 강사의 규칙끼리라 그대로 맞는다
 
 **슬롯 생성 쿼리.** 켜진 규칙마다 오픈 범위 `[오늘, 오늘 + N일)`([BE-ADR-0006](../../../decisions/0006-time-and-timezone.md))의 날짜 중 규칙 요일과 같은 날의 슬롯을 만든다. 이미 있는 회차는 건너뛴다.
