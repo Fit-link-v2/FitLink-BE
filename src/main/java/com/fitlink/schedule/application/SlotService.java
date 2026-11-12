@@ -4,6 +4,8 @@ import com.fitlink.instructor.application.SettingService;
 import com.fitlink.schedule.infra.SlotRepository;
 import com.fitlink.schedule.application.SlotRejectedException.Reason;
 import java.time.Clock;
+import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.time.temporal.ChronoUnit;
 import org.springframework.stereotype.Service;
@@ -41,6 +43,31 @@ public class SlotService {
 	@Transactional(readOnly = true)
 	public Slot detail(long instructorId, long id) {
 		return owned(instructorId, id);
+	}
+
+	// 그 슬롯의 시각만 같은 날 안에서 바꾼다. 규칙과 다른 주 회차는 그대로다.
+	// 판정 순서: 404 → 휴강 → 시작함 → 날짜를 보냄 · 새 시각이 지금 이전(400) → 예약 있음 → 같은 시각 수업(409, DB 유니크)
+	@Transactional
+	public Slot changeTime(long instructorId, long id, LocalTime startTime, LocalDate date) {
+		OffsetDateTime now = now();
+		for (int attempt = 0; attempt < ATTEMPTS; attempt++) {
+			Slot slot = owned(instructorId, id);
+			rejectClosed(slot, now);
+			if (date != null) {
+				throw new InvalidRequestException("date", "날짜는 바꿀 수 없다");
+			}
+			OffsetDateTime startsAt = slot.occursOn().atTime(startTime).atZone(ScheduleZone.SEOUL).toOffsetDateTime();
+			if (!startsAt.isAfter(now)) {
+				throw new InvalidRequestException("startTime", "지금 이후 시각으로 옮긴다");
+			}
+			if (slot.taken() > 0) {
+				throw new SlotRejectedException(Reason.SLOT_HAS_BOOKINGS);
+			}
+			if (slots.changeTime(instructorId, id, startsAt, now)) {
+				return owned(instructorId, id);
+			}
+		}
+		throw new IllegalStateException("슬롯 " + id + "의 상태가 계속 바뀌어 시각을 바꾸지 못했다");
 	}
 
 	// 행을 남기고 canceled_at을 채운다. 예약이 있어도 휴강하고, 되돌리는 길은 없다.

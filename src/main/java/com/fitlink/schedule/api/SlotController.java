@@ -4,11 +4,18 @@ import com.fitlink.schedule.application.Slot;
 import com.fitlink.schedule.application.SlotService;
 import com.fitlink.schedule.application.UpcomingSlots;
 import com.fitlink.schedule.application.Weekday;
+import com.fasterxml.jackson.annotation.JsonFormat;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotNull;
+import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.List;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -33,9 +40,19 @@ class SlotController {
 		return SlotDetail.of(slots.detail(instructorId, id));
 	}
 
+	@PatchMapping("/{id}")
+	SlotDetail changeTime(@AuthenticationPrincipal Long instructorId, @PathVariable long id,
+			@Valid @RequestBody ChangeRequest request) {
+		return SlotDetail.of(slots.changeTime(instructorId, id, request.startTime(), request.date()));
+	}
+
 	@PostMapping("/{id}/cancel")
 	SlotDetail cancel(@AuthenticationPrincipal Long instructorId, @PathVariable long id) {
 		return SlotDetail.of(slots.cancel(instructorId, id));
+	}
+
+	record ChangeRequest(@NotNull(message = "시작 시각을 HH:mm으로 보낸다") @JsonFormat(pattern = "HH:mm") LocalTime startTime,
+			LocalDate date) {
 	}
 
 	record SlotList(int openRangeDays, List<SlotSummary> items) {
