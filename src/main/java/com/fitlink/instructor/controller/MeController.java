@@ -1,6 +1,6 @@
 package com.fitlink.instructor.controller;
 
-import com.fitlink.instructor.model.InstructorProfile;
+import com.fitlink.instructor.dto.InstructorProfileResponse;
 import com.fitlink.instructor.service.InstructorService;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -16,8 +16,8 @@ class MeController {
 	}
 
 	@GetMapping("/me")
-	InstructorProfile me(@AuthenticationPrincipal Long instructorId) {
-		return instructors.profile(instructorId);
+	InstructorProfileResponse me(@AuthenticationPrincipal Long instructorId) {
+		return InstructorProfileResponse.of(instructors.profile(instructorId));
 	}
 
 }
