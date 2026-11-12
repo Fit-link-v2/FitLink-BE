@@ -1,4 +1,4 @@
-package com.fitlink.auth.filter;
+package com.fitlink.auth.security;
 
 import com.fitlink.common.exception.ErrorResponse;
 import com.fitlink.common.exception.ErrorResponseWriter;
@@ -16,13 +16,13 @@ import org.springframework.web.filter.OncePerRequestFilter;
  * 다른 사이트의 form은 커스텀 헤더를 붙일 수 없고, fetch로 붙이면 CORS 사전 요청에서 막히므로 위조 요청을 걸러 낸다.
  * 인증 확인 뒤에 두어, 인증이 필요한 경로는 401이 403보다 먼저 나간다.
  */
-public class CsrfHeaderFilter extends OncePerRequestFilter {
+class CsrfHeaderFilter extends OncePerRequestFilter {
 
 	private static final Set<String> SAFE_METHODS = Set.of("GET", "HEAD", "OPTIONS");
 
 	private final ErrorResponseWriter errors;
 
-	public CsrfHeaderFilter(ErrorResponseWriter errors) {
+	CsrfHeaderFilter(ErrorResponseWriter errors) {
 		this.errors = errors;
 	}
 

@@ -1,6 +1,5 @@
-package com.fitlink.auth.controller;
+package com.fitlink.auth.config;
 
-import com.fitlink.auth.config.AuthProperties;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import java.time.Duration;

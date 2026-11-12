@@ -1,7 +1,7 @@
 package com.fitlink.instructor.service;
 
-import com.fitlink.instructor.model.InstructorProfile;
 import com.fitlink.instructor.InstructorSignUpCommand;
+import com.fitlink.instructor.model.InstructorProfile;
 import com.fitlink.instructor.repository.InstructorRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;

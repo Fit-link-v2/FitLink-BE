@@ -1,6 +1,6 @@
-package com.fitlink.auth.filter;
+package com.fitlink.auth.security;
 
-import com.fitlink.auth.controller.AuthCookies;
+import com.fitlink.auth.config.AuthCookies;
 import com.fitlink.auth.service.SessionService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
