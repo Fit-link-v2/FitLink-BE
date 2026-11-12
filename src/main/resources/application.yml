@@ -4,6 +4,10 @@ spring:
   # local은 레포 루트의 .env(git 제외)를 환경변수처럼 읽는다
   config:
     import: optional:file:.env[.properties]
+  jackson:
+    deserialization:
+      # 정수 필드에 8.7이 오면 8로 잘라 받지 않고 400으로 거부한다
+      accept-float-as-int: false
 
 server:
   # 앞단 Caddy(reverse proxy)가 넘기는 X-Forwarded-* 헤더로 원래 요청의 https · 호스트를 알아낸다

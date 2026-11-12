@@ -44,28 +44,35 @@ flowchart LR
 
 의존 방향은 [컨텍스트 맵](context-map.md)의 외래 키 방향과 같다. 순환을 만들지 않고, Spring Modulith 검증 테스트가 빌드마다 확인한다.
 
-### 모듈 안의 레이어
+### 모듈 안의 구조
 
 ```
 {모듈}/
-  api/           HTTP 요청 · 응답, 입력 검증, 에러 코드 변환
-  application/   유스케이스. 트랜잭션 경계. 다른 모듈이 부르는 유일한 패키지
-  infra/         Repository(SQL), 외부 API 클라이언트
+  {모듈}Facade        다른 모듈이 부르는 유일한 창구(모듈 루트). 로직 없이 service에 넘긴다
+  {모듈}...Command    Facade가 받는 값 / {모듈}...Info  Facade가 돌려주는 값
+  controller/         HTTP 요청 · 응답
+  dto/                HTTP 요청 · 응답 record. controller만 쓴다
+  service/            유스케이스. 트랜잭션 경계
+  model/              도메인 값(record · enum)
+  repository/         SQL
+  exception/          모듈의 예외 · 에러 코드 변환
+  client/ security/ config/   외부 API 호출 · Security 설정과 필터 · 설정값(필요한 모듈만)
 ```
 
-- 호출은 `api → application → infra` 한 방향이다
-- 다른 모듈은 상대의 `application`만 부른다
+- 모듈 안의 호출은 `controller → service → repository` 한 방향이다
+- 다른 모듈은 상대 모듈 루트의 `{모듈}Facade`만 부른다. `model`은 내보내지 않고 `Info`로 바꿔 준다
 - 쓰기는 Transaction Script다. 서비스 메서드 하나가 트랜잭션 하나이고, 규칙은 SQL 조건과 DB 제약에 둔다. 전술적 DDD(Entity · Aggregate)는 쓰지 않는다
-- SQL은 `infra`의 Repository에만 두고, Repository는 `record`를 주고받는다([BE-ADR-0012](../decisions/0012-jdbc-client.md))
+- SQL은 `repository`에만 두고, Repository는 `record`를 주고받는다([BE-ADR-0012](../decisions/0012-jdbc-client.md))
+- 모듈 사이 경계는 Spring Modulith 테스트(`ModularityTests`)가, 모듈 안 방향과 모듈 루트 이름 규칙은 ArchUnit 테스트(`ArchitectureTests`)가 빌드마다 확인한다([BE-ADR-0017](../decisions/0017-package-structure.md))
 
-도메인이 아닌 공통 설정(Spring Security 필터 체인 등)은 최상위 `config` 패키지에 둔다. 도메인 모듈은 `config`를 부르지 않는다.
+여러 모듈이 같이 쓰고 도메인 규칙이 없는 코드(시계 설정, 에러 응답 모양)는 최상위 `common` 모듈에 둔다. `common`은 다른 모듈을 부르지 않는다.
 
 ### 인증 흐름
 
 ```mermaid
 flowchart LR
-    req["요청<br/>SESSION 쿠키"] --> chain["Security 필터 체인<br/>config.SecurityConfig"]
-    chain --> filter["세션 확인 필터<br/>auth.api.SessionAuthenticationFilter"]
+    req["요청<br/>SESSION 쿠키"] --> chain["Security 필터 체인<br/>auth.security.SecurityConfig"]
+    chain --> filter["세션 확인 필터<br/>auth.security.SessionAuthenticationFilter"]
     filter -->|"유효: 만료 14일 연장<br/>쿠키 다시 발급"| ctx["SecurityContext<br/>강사 id"]
     filter -->|"없음 · 만료 · 로그아웃"| anon["익명"]
     ctx --> csrf["X-CSRF 헤더 검사<br/>GET · HEAD · OPTIONS 제외"]
@@ -74,7 +81,7 @@ flowchart LR
     csrf --> ctrl["Controller<br/>@AuthenticationPrincipal Long"]
 ```
 
-- 세션 확인 필터는 `auth` 모듈에 있고, `config`가 Security 필터 체인의 익명 인증 필터 앞에 끼운다([BE-ADR-0016](../decisions/0016-auth-module.md))
+- Security 설정과 세션 확인 필터는 둘 다 `auth` 모듈의 `security`에 있다. 세션 확인 필터는 익명 인증 필터 앞에 끼운다([BE-ADR-0016](../decisions/0016-auth-module.md), [BE-ADR-0017](../decisions/0017-package-structure.md))
 - 도메인 모듈은 `auth`를 부르지 않는다. 필터가 SecurityContext에 남긴 강사 id를 Controller 인자로 받는다
 - 열린 경로는 `/actuator/health`, `GET /auth/kakao`, `GET /auth/kakao/callback`, `POST /auth/logout`뿐이다
 - 요청 주소 · 컨트롤러 인자 · 카카오로 보내는 form · 요청 원문을 찍는 Spring · Tomcat logger는 `application.yml`에서 INFO로 고정한다. 알려진 logger만 막는 목록이므로 운영에서 root나 프레임워크 패키지 전체를 DEBUG로 내리지 않고, `spring.mvc.log-request-details`를 켜지 않는다

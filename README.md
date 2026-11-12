@@ -14,9 +14,10 @@ FitLink-BE/
   compose.yaml                local 개발용 PostgreSQL
   src/main/java/com/fitlink/
     instructor/ schedule/ membership/ entitlement/ booking/ analytics/
-                              도메인 모듈. 각 모듈 안은 api · application · infra
-    auth/                     로그인 · 세션 (도메인이 아닌 기술 모듈)
-    config/                   공통 설정 (Spring Security)
+                              도메인 모듈. 안은 controller · dto · service · model · repository · exception,
+                              다른 모듈에는 루트의 {모듈}Facade만 연다
+    auth/                     로그인 · 세션 · Spring Security 설정 (도메인이 아닌 기술 모듈)
+    common/                   여러 모듈이 같이 쓰는 코드 (시계 설정, 에러 응답 모양)
   src/main/resources/
     application.yml           공통 설정
     application-local.yml     local 프로필 (compose.yaml의 DB)
