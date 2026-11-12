@@ -7,7 +7,7 @@
 | Phase | User Story | AC | 상태 |
 |---|---|---|---|
 | 1 | PRD-0001 US 1 가입 · 로그인 · 세션 | AC-1 ~ AC-10 | 완료 |
-| 2 | US 2 시간표 · 오픈 범위, 매일 자정 작업 | AC-11 ~ AC-22 | 진행 중 (2.5 완료) |
+| 2 | US 2 시간표 · 오픈 범위, 매일 자정 작업 | AC-11 ~ AC-22 | 진행 중 (2.6 완료) |
 | 3 ~ | US 3 ~ 5 회원 · 수강권 · 링크 | 추가 예정 | Phase 2 뒤 작성 |
 
 ### Phase 1 구조
@@ -297,11 +297,11 @@ flowchart LR
 
 ### 2.6 회차 시각 변경 · 휴강
 
-- [ ] RED: `[BE-0001 AC-18] 19:30으로 바꾸면 그 슬롯만, occurs_on · 다른 주 회차 그대로`
-- [ ] RED: `[BE-0001 AC-18] 휴강 → SLOT_CANCELED, 시작 → CLASS_STARTED, 지난 시각 · date → 400, taken > 0 → SLOT_HAS_BOOKINGS, 같은 시각 → SLOT_TIME_TAKEN, 여러 개면 앞의 것`
-- [ ] RED: `[BE-0001 AC-19] 휴강하면 canceled_at, 다시 보내면 처음 값 그대로 200, 시작한 슬롯은 CLASS_STARTED`, `taken > 0이어도 휴강된다`
-- [ ] GREEN: 읽고 판정 → 조건부 UPDATE. 시각 변경은 `WHERE taken = 0 AND canceled_at IS NULL AND starts_at > $now`, 휴강은 `SET canceled_at = $now WHERE canceled_at IS NULL AND starts_at > $now`(예약이 있어도 휴강한다). 0행이면 다시 읽어 각자의 순서로 답한다. 휴강은 이미 휴강이면 200, 시작했으면 CLASS_STARTED
-- [ ] REFACTOR: 판정 순서를 한 메서드로(2.7과 같이 씀)
+- [x] RED: `[BE-0001 AC-18] 19:30으로 바꾸면 그 슬롯만, occurs_on · 다른 주 회차 그대로`
+- [x] RED: `[BE-0001 AC-18] 휴강 → SLOT_CANCELED, 시작 → CLASS_STARTED, 지난 시각 · date → 400, taken > 0 → SLOT_HAS_BOOKINGS, 같은 시각 → SLOT_TIME_TAKEN, 여러 개면 앞의 것`
+- [x] RED: `[BE-0001 AC-19] 휴강하면 canceled_at, 다시 보내면 처음 값 그대로 200, 시작한 슬롯은 CLASS_STARTED`, `taken > 0이어도 휴강된다`
+- [x] GREEN: 읽고 판정 → 조건부 UPDATE. 시각 변경은 `WHERE taken = 0 AND canceled_at IS NULL AND starts_at > $now`, 휴강은 `SET canceled_at = $now WHERE canceled_at IS NULL AND starts_at > $now`(예약이 있어도 휴강한다). 0행이면 다시 읽어 각자의 순서로 답한다. 휴강은 이미 휴강이면 200, 시작했으면 CLASS_STARTED — 0행일 때 다시 읽기는 3번까지, 그래도 못 바꾸면 500. 조건부 UPDATE가 판정 없이도 휴강 · 예약 · 시작한 슬롯과 다른 강사 슬롯을 막는지 레포지토리 테스트로 확인. 시작한 수업의 휴강은 허용하지 않는다(2026-11-11 확정). 일회성 수업의 `date`는 2.7 전까지 반복 회차와 같이 400
+- [x] REFACTOR: 판정 순서를 한 메서드로(2.7과 같이 씀) — 휴강 · 시작 판정을 `rejectClosed`로 묶었다. 400을 서비스에서도 던지도록 `InvalidRequestException`을 application으로 옮기고, 서울 zone은 `ScheduleZone` 한 곳에 둔다. 리뷰 반영: 지금 시각을 마이크로초로 잘라 자바 판정과 UPDATE의 WHERE가 경계에서 같은 값을 쓰게 했다
 
 ### 2.7 일회성 수업
 
