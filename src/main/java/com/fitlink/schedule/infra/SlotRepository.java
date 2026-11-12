@@ -1,12 +1,27 @@
 package com.fitlink.schedule.infra;
 
+import com.fitlink.schedule.application.Slot;
+import com.fitlink.schedule.application.Weekday;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.OffsetDateTime;
+import java.util.List;
+import java.util.Optional;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
 @Repository
 public class SlotRepository {
+
+	// 일회성 수업은 규칙이 없어 LEFT JOIN이다. 규칙의 instructor_id가 아니라 슬롯의 것으로 거른다
+	private static final String SELECT_SLOT = """
+			SELECT c.id, c.starts_at, c.capacity, c.taken, c.canceled_at,
+			       r.id AS rule_id, r.weekday AS rule_weekday, r.start_time AS rule_start_time
+			  FROM class_slot c
+			  LEFT JOIN recurrence r ON r.id = c.recurrence_id
+			""";
 
 	private final JdbcClient jdbc;
 
@@ -73,6 +88,35 @@ public class SlotRepository {
 			.param("instructorId", instructorId)
 			.param("today", today)
 			.update();
+	}
+
+	// 시작 시각이 now 이후인 이 강사의 슬롯. 휴강 · 오픈 범위 밖도 넣는다. class_slot_owner_idx를 탄다
+	public List<Slot> findUpcoming(long instructorId, OffsetDateTime now) {
+		return jdbc.sql(SELECT_SLOT + """
+				 WHERE c.instructor_id = :instructorId AND c.starts_at > :now
+				 ORDER BY c.starts_at, c.id
+				""")
+			.param("instructorId", instructorId)
+			.param("now", now)
+			.query(SlotRepository::slot)
+			.list();
+	}
+
+	public Optional<Slot> find(long instructorId, long id) {
+		return jdbc.sql(SELECT_SLOT + " WHERE c.id = :id AND c.instructor_id = :instructorId")
+			.param("id", id)
+			.param("instructorId", instructorId)
+			.query(SlotRepository::slot)
+			.optional();
+	}
+
+	private static Slot slot(ResultSet rs, int rowNum) throws SQLException {
+		long ruleId = rs.getLong("rule_id");
+		Slot.Rule rule = rs.wasNull() ? null
+				: new Slot.Rule(ruleId, Weekday.ofDow(rs.getInt("rule_weekday")),
+						rs.getObject("rule_start_time", LocalTime.class));
+		return new Slot(rs.getLong("id"), rs.getObject("starts_at", OffsetDateTime.class), rs.getInt("capacity"),
+				rs.getInt("taken"), rs.getObject("canceled_at", OffsetDateTime.class), rule);
 	}
 
 }
