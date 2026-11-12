@@ -1,5 +1,9 @@
 package com.fitlink.auth;
 
+import com.fitlink.IntegrationTest;
+import com.fitlink.auth.client.FakeKakaoServer;
+import com.fitlink.auth.client.KakaoUser;
+import com.fitlink.auth.config.AuthProperties;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
@@ -8,9 +12,6 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.fitlink.IntegrationTest;
-import com.fitlink.auth.infra.FakeKakaoServer;
-import com.fitlink.instructor.application.KakaoUser;
 import jakarta.servlet.http.Cookie;
 import java.util.ArrayList;
 import java.util.List;

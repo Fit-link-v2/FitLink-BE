@@ -5,6 +5,7 @@ BE 내부 설계 결정. FE와 같이 따르는 결정은 [PRD 레포 `decisions
 - 파일 이름: `{4자리}-{영문-슬러그}.md`. ID는 `BE-ADR-{4자리}`
 - 형식: [`templates/decision.md`](../templates/decision.md) (MADR)
 - 한 번 `accepted`가 된 결정은 고치지 않는다. 바뀌면 새 번호를 만들고 이전 결정의 상태를 `superseded by BE-ADR-XXXX`로 바꾼다
+- 결정의 일부만 바뀌면 이전 결정은 `accepted`로 두고, 아래 표의 상태 칸에 어느 결정이 어디로 대체됐는지 적는다
 
 | ID | 제목 | 상태 |
 |---|---|---|
@@ -18,9 +19,10 @@ BE 내부 설계 결정. FE와 같이 따르는 결정은 [PRD 레포 `decisions
 | [BE-ADR-0008](0008-session-store.md) | 강사 세션 저장소는 직접 만든 `instructor_session` 테이블로 한다 | accepted |
 | [BE-ADR-0009](0009-entitlement-kind-exclusion.md) | 수강권 종류 겹침은 등록 검사 + EXCLUDE 제약 두 겹으로 막는다 | accepted |
 | [BE-ADR-0010](0010-restored-in-0003.md) | `booking.restored`는 기능 0003(마이그레이션 002)에서 만든다 | accepted |
-| [BE-ADR-0011](0011-modular-monolith.md) | 서버 하나에 도메인 6개를 모듈로 나누고, Spring Modulith 테스트로 경계를 지킨다 | accepted |
-| [BE-ADR-0012](0012-jdbc-client.md) | 데이터 접근은 `JdbcClient`로 SQL을 직접 쓴다 | accepted |
+| [BE-ADR-0011](0011-modular-monolith.md) | 서버 하나에 도메인 6개를 모듈로 나누고, Spring Modulith 테스트로 경계를 지킨다 | accepted (결정 3 · 4는 BE-ADR-0017로 대체) |
+| [BE-ADR-0012](0012-jdbc-client.md) | 데이터 접근은 `JdbcClient`로 SQL을 직접 쓴다 | accepted (결정 2의 패키지 이름은 BE-ADR-0017로 대체) |
 | [BE-ADR-0013](0013-stack-and-testing.md) | 기술 스택은 Java LTS · Spring Boot · Spring MVC · Flyway, 테스트는 Testcontainers로 실제 PostgreSQL에 대해 한다 | accepted |
 | [BE-ADR-0014](0014-kakao-login-direct.md) | 카카오 로그인은 Spring Security OAuth2 Client 없이 직접 구현한다 | accepted |
 | [BE-ADR-0015](0015-hosting-lightsail.md) | BE는 AWS Lightsail 1대에 Docker Compose(Caddy · Spring · PostgreSQL)로 올린다 | accepted |
-| [BE-ADR-0016](0016-auth-module.md) | 로그인 · 세션 코드는 도메인 모듈과 따로 `auth` 모듈에 둔다 | accepted |
+| [BE-ADR-0016](0016-auth-module.md) | 로그인 · 세션 코드는 도메인 모듈과 따로 `auth` 모듈에 둔다 | accepted (결정 4 · 5는 BE-ADR-0017로 대체) |
+| [BE-ADR-0017](0017-package-structure.md) | 모듈 안은 역할별 폴더로 나누고, 다른 모듈에는 루트의 Facade 하나만 연다 | accepted |

@@ -4,6 +4,10 @@ spring:
   # local은 레포 루트의 .env(git 제외)를 환경변수처럼 읽는다
   config:
     import: optional:file:.env[.properties]
+  jackson:
+    deserialization:
+      # 정수 필드에 8.7이 오면 8로 잘라 받지 않고 400으로 거부한다
+      accept-float-as-int: false
 
 server:
   # 앞단 Caddy(reverse proxy)가 넘기는 X-Forwarded-* 헤더로 원래 요청의 https · 호스트를 알아낸다
@@ -24,9 +28,10 @@ fitlink:
       # 카카오 로그인 중 state를 담는 쿠키. https 환경은 __Host-Http-KAKAO-STATE
       state: KAKAO-STATE
     # 카카오 앱 키는 코드 · 설정 파일에 두지 않고 환경변수로만 받는다. local은 위 spring.config.import의 .env에서 읽는다
+    # 환경변수가 없으면 빈 값이 되어 앱이 시작할 때 멈춘다. ':'가 없으면 '${...}' 글자가 그대로 값이 되어 그냥 뜬다
     kakao:
-      client-id: ${KAKAO_CLIENT_ID}
-      client-secret: ${KAKAO_CLIENT_SECRET}
+      client-id: ${KAKAO_CLIENT_ID:}
+      client-secret: ${KAKAO_CLIENT_SECRET:}
       redirect-uri: http://localhost:8080/auth/kakao/callback
     # 로그인을 마치면 보내는 강사 화면 주소. 요청 파라미터로 바꿀 수 없다(다른 사이트로 보내는 open redirect 방지)
     success-url: http://localhost:5173/
