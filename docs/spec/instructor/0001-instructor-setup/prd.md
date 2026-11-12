@@ -455,7 +455,7 @@ CREATE TABLE recurrence (
 
 CREATE INDEX recurrence_owner_idx ON recurrence (instructor_id);
 
--- 같은 강사가 같은 요일 · 같은 시각에 규칙을 두 개 두지 못한다.
+-- 같은 강사가 같은 요일 · 같은 시각에 켜진 규칙을 두 개 두지 못한다.
 CREATE UNIQUE INDEX recurrence_slot_uidx
   ON recurrence (instructor_id, weekday, start_time) WHERE active;
 

@@ -7,7 +7,7 @@
 | Phase | User Story | AC | 상태 |
 |---|---|---|---|
 | 1 | PRD-0001 US 1 가입 · 로그인 · 세션 | AC-1 ~ AC-10 | 진행 중 (1.10 완료, 끝난 뒤 확인 남음) |
-| 2 | US 2 시간표 · 오픈 범위, 매일 자정 작업 | AC-11 ~ AC-22 | 계획 |
+| 2 | US 2 시간표 · 오픈 범위, 매일 자정 작업 | AC-11 ~ AC-22 | 진행 중 (2.1 완료) |
 | 3 ~ | US 3 ~ 5 회원 · 수강권 · 링크 | 추가 예정 | Phase 2 뒤 작성 |
 
 ### Phase 1 구조
@@ -253,11 +253,11 @@ flowchart LR
 
 ### 2.1 스키마 (V3) · Clock
 
-- [ ] RED: `[BE-0001 AC-12] 같은 recurrence_id · occurs_on 두 번째 INSERT는 class_slot_occurrence_uk 위반`
-- [ ] RED: `[BE-0001 AC-15] 같은 강사 · 같은 starts_at의 휴강 아닌 슬롯 두 번째 INSERT는 class_slot_time_uidx 위반, 휴강한 행과는 겹쳐도 된다`
-- [ ] RED: `[BE-0001 AC-11] 같은 강사 · 요일 · 시각의 켜진 규칙 두 번째 INSERT는 recurrence_slot_uidx 위반, 꺼진 규칙과는 겹쳐도 된다`
-- [ ] GREEN: `V3__schedule.sql`에 `recurrence` · `class_slot`(prd 3.1 DDL 그대로), `ClockConfig`, 테스트용 고정 `Clock`
-- [ ] REFACTOR: 테스트에서 강사 · 규칙 · 슬롯을 만드는 도우미(SQL 직접 INSERT) 정리
+- [x] RED: `[BE-0001 AC-12] 같은 recurrence_id · occurs_on 두 번째 INSERT는 class_slot_occurrence_uk 위반`
+- [x] RED: `[BE-0001 AC-15] 같은 강사 · 같은 starts_at의 휴강 아닌 슬롯 두 번째 INSERT는 class_slot_time_uidx 위반, 휴강한 행과는 겹쳐도 된다`
+- [x] RED: `[BE-0001 AC-11] 같은 강사 · 요일 · 시각의 켜진 규칙 두 번째 INSERT는 recurrence_slot_uidx 위반, 꺼진 규칙과는 겹쳐도 된다`
+- [x] GREEN: `V3__schedule.sql`에 `recurrence` · `class_slot`(prd 3.1 DDL 그대로), `ClockConfig`, 테스트용 고정 `Clock` — `TestClock`(기본 목요일 12:00 서울)을 `@Primary`로 넣고 `IntegrationTest`가 테스트마다 되돌린다. 부분 유니크 조건(`WHERE canceled_at IS NULL` · `WHERE active`)을 각각 빼면 테스트가 실패하는 것 확인. 소유자 복합 FK · `taken` 범위 CHECK도 테스트로 고정. `TestClock.withZone`은 고정 사본이 아니라 같은 "지금"을 보는 시계를 돌려준다(빈이 미리 받아 둔 시계도 `set()`을 따라감)
+- [x] REFACTOR: 테스트에서 강사 · 규칙 · 슬롯을 만드는 도우미(SQL 직접 INSERT) 정리 — `ScheduleFixtures`. 테스트 전 TRUNCATE 대상은 DB의 테이블 목록에서 읽는다(마이그레이션에 테이블을 더해도 고칠 곳 없음)
 
 ### 2.2 회차 생성 (SlotGeneration · SlotRepository)
 
