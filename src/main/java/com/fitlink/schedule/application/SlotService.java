@@ -2,14 +2,19 @@ package com.fitlink.schedule.application;
 
 import com.fitlink.instructor.application.SettingService;
 import com.fitlink.schedule.infra.SlotRepository;
+import com.fitlink.schedule.application.SlotRejectedException.Reason;
 import java.time.Clock;
 import java.time.OffsetDateTime;
+import java.time.temporal.ChronoUnit;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class SlotService {
+
+	// 조건부 UPDATE가 0행이면 다시 읽어 판정한다. 그 사이 상태가 계속 바뀌는 경우를 끝없이 따라가지 않는다
+	private static final int ATTEMPTS = 3;
 
 	private final SlotRepository slots;
 
@@ -35,7 +40,45 @@ public class SlotService {
 	// 상세는 지난 슬롯도 준다
 	@Transactional(readOnly = true)
 	public Slot detail(long instructorId, long id) {
+		return owned(instructorId, id);
+	}
+
+	// 행을 남기고 canceled_at을 채운다. 예약이 있어도 휴강하고, 되돌리는 길은 없다.
+	// 판정 순서: 404 → 이미 휴강이면 처음 값 그대로 → 시작함
+	@Transactional
+	public Slot cancel(long instructorId, long id) {
+		OffsetDateTime now = now();
+		for (int attempt = 0; attempt < ATTEMPTS; attempt++) {
+			Slot slot = owned(instructorId, id);
+			if (slot.canceled()) {
+				return slot;
+			}
+			rejectClosed(slot, now);
+			if (slots.cancel(instructorId, id, now)) {
+				return owned(instructorId, id);
+			}
+		}
+		throw new IllegalStateException("슬롯 " + id + "의 상태가 계속 바뀌어 휴강하지 못했다");
+	}
+
+	// DB는 마이크로초까지 저장한다. 나노초가 남은 채로 넘기면 드라이버가 반올림해, 자바의 판정과 UPDATE의 WHERE가
+	// 경계에서 다른 답을 낸다(자바는 시작 전, SQL은 시작함 → 0행 반복). 한 번 잘라 양쪽이 같은 값을 쓰게 한다
+	private OffsetDateTime now() {
+		return OffsetDateTime.now(clock).truncatedTo(ChronoUnit.MICROS);
+	}
+
+	private Slot owned(long instructorId, long id) {
 		return slots.find(instructorId, id).orElseThrow(NotFoundException::new);
+	}
+
+	// 휴강했거나 시작한 수업은 더 바꿀 수 없다
+	private static void rejectClosed(Slot slot, OffsetDateTime now) {
+		if (slot.canceled()) {
+			throw new SlotRejectedException(Reason.SLOT_CANCELED);
+		}
+		if (slot.startedAt(now)) {
+			throw new SlotRejectedException(Reason.CLASS_STARTED);
+		}
 	}
 
 }

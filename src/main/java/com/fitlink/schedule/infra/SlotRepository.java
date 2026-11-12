@@ -110,6 +110,19 @@ public class SlotRepository {
 			.optional();
 	}
 
+	// 예약이 있어도 휴강한다. 행은 지우지 않아 회차 생성이 그 날을 다시 채우지 않는다. 바꿨으면 true
+	public boolean cancel(long instructorId, long id, OffsetDateTime now) {
+		return jdbc.sql("""
+				UPDATE class_slot SET canceled_at = :now
+				 WHERE id = :id AND instructor_id = :instructorId
+				   AND canceled_at IS NULL AND starts_at > :now
+				""")
+			.param("id", id)
+			.param("instructorId", instructorId)
+			.param("now", now)
+			.update() == 1;
+	}
+
 	private static Slot slot(ResultSet rs, int rowNum) throws SQLException {
 		long ruleId = rs.getLong("rule_id");
 		Slot.Rule rule = rs.wasNull() ? null

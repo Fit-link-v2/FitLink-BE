@@ -2,6 +2,7 @@ package com.fitlink.schedule.api;
 
 import com.fitlink.schedule.application.NotFoundException;
 import com.fitlink.schedule.application.RecurrenceDuplicateException;
+import com.fitlink.schedule.application.SlotRejectedException;
 import java.util.List;
 import java.util.Map;
 import org.springframework.dao.DuplicateKeyException;
@@ -69,6 +70,12 @@ class ScheduleErrorHandler {
 	@ExceptionHandler
 	ResponseEntity<ApiError> notFound(NotFoundException e) {
 		return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiError.of("NOT_FOUND", e.getMessage()));
+	}
+
+	@ExceptionHandler
+	ResponseEntity<ApiError> rejected(SlotRejectedException e) {
+		return ResponseEntity.status(HttpStatus.UNPROCESSABLE_CONTENT)
+			.body(ApiError.of(e.reason().name(), e.getMessage()));
 	}
 
 	@ExceptionHandler
