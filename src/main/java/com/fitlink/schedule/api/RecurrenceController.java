@@ -1,5 +1,6 @@
 package com.fitlink.schedule.api;
 
+import com.fitlink.schedule.application.InvalidRequestException;
 import com.fitlink.schedule.application.Recurrence;
 import com.fitlink.schedule.application.RecurrenceService;
 import com.fitlink.schedule.application.Weekday;

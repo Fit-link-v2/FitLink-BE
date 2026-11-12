@@ -1,5 +1,6 @@
 package com.fitlink.schedule.api;
 
+import com.fitlink.schedule.application.InvalidRequestException;
 import com.fitlink.schedule.application.NotFoundException;
 import com.fitlink.schedule.application.RecurrenceDuplicateException;
 import com.fitlink.schedule.application.SlotRejectedException;
