@@ -1,8 +1,8 @@
 package com.fitlink.auth.controller;
 
 import com.fitlink.IntegrationTest;
-import com.fitlink.auth.exception.KakaoLoginException;
 import com.fitlink.auth.client.KakaoUser;
+import com.fitlink.auth.exception.KakaoLoginException;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;

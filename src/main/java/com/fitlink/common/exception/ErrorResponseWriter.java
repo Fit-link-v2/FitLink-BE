@@ -13,7 +13,7 @@ public class ErrorResponseWriter {
 
 	private final JsonMapper json;
 
-	public ErrorResponseWriter(JsonMapper json) {
+	ErrorResponseWriter(JsonMapper json) {
 		this.json = json;
 	}
 

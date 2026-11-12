@@ -1,5 +1,6 @@
 package com.fitlink.auth.controller;
 
+import com.fitlink.auth.config.AuthCookies;
 import com.fitlink.auth.config.AuthProperties;
 import com.fitlink.auth.exception.KakaoLoginException;
 import com.fitlink.auth.service.LoginService;

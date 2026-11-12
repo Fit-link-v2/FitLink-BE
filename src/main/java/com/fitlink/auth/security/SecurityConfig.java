@@ -1,7 +1,5 @@
-package com.fitlink.auth.config;
+package com.fitlink.auth.security;
 
-import com.fitlink.auth.filter.CsrfHeaderFilter;
-import com.fitlink.auth.filter.SessionAuthenticationFilter;
 import com.fitlink.common.exception.ErrorResponse;
 import com.fitlink.common.exception.ErrorResponseWriter;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;

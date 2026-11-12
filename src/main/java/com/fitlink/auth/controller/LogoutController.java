@@ -1,5 +1,6 @@
 package com.fitlink.auth.controller;
 
+import com.fitlink.auth.config.AuthCookies;
 import com.fitlink.auth.service.SessionService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpHeaders;
