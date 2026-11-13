@@ -55,7 +55,7 @@ flowchart LR
   service/            유스케이스. 트랜잭션 경계
   model/              도메인 값(record · enum)
   repository/         SQL
-  exception/          모듈의 예외 · 에러 코드 변환
+  exception/          모듈의 에러 코드 enum · DB 제약 이름 대응표
   client/ security/ config/   외부 API 호출 · Security 설정과 필터 · 설정값(필요한 모듈만)
 ```
 
@@ -65,7 +65,23 @@ flowchart LR
 - SQL은 `repository`에만 두고, Repository는 `record`를 주고받는다([BE-ADR-0012](../decisions/0012-jdbc-client.md))
 - 모듈 사이 경계는 Spring Modulith 테스트(`ModularityTests`)가, 모듈 안 방향과 모듈 루트 이름 규칙은 ArchUnit 테스트(`ArchitectureTests`)가 빌드마다 확인한다([BE-ADR-0017](../decisions/0017-package-structure.md))
 
-여러 모듈이 같이 쓰고 도메인 규칙이 없는 코드(시계 설정, 에러 응답 모양)는 최상위 `common` 모듈에 둔다. `common`은 다른 모듈을 부르지 않는다.
+여러 모듈이 같이 쓰고 도메인 규칙이 없는 코드(시계 설정, 에러 응답 모양과 공통 에러 처리)는 최상위 `common` 모듈에 둔다. `common`은 다른 모듈을 부르지 않는다.
+
+### 에러 처리
+
+```mermaid
+flowchart LR
+    svc["service<br/>throw FitlinkException(에러 코드)"] --> h["common.exception.GlobalErrorHandler"]
+    db["DB 제약 위반"] -->|"제약 이름"| map["모듈의 ConstraintErrors"] --> h
+    mvc["Spring MVC 예외<br/>검증 실패 · 405 · 415"] --> h
+    etc["그 밖의 예외"] -->|"500 INTERNAL_ERROR"| h
+    h --> res["{ code, message, ...details }"]
+    filter["필터 401 · 403"] -->|"ErrorResponseWriter"| res
+```
+
+- 예외는 `FitlinkException` 하나이고, 사유는 모듈의 `{모듈}ErrorCode` enum으로 구분한다. 응답 code는 enum 상수 이름이다([BE-ADR-0018](../decisions/0018-error-handling.md))
+- 처리기는 `common`에 하나만 두고 모든 컨트롤러에 적용한다. Spring MVC 예외는 원래 상태 코드를 지키고 본문만 같은 모양으로 바꾼다
+- 4xx는 warn, 5xx는 error 로그. 500 응답에는 원인을 담지 않는다
 
 ### 인증 흐름
 

@@ -1,7 +1,8 @@
 package com.fitlink.schedule.service;
 
-import com.fitlink.schedule.exception.NotFoundException;
-import com.fitlink.schedule.exception.RecurrenceDuplicateException;
+import com.fitlink.common.exception.CommonErrorCode;
+import com.fitlink.common.exception.FitlinkException;
+import com.fitlink.schedule.exception.ScheduleErrorCode;
 import com.fitlink.schedule.model.GenerationTime;
 import com.fitlink.schedule.model.Recurrence;
 import com.fitlink.schedule.model.Weekday;
@@ -9,6 +10,7 @@ import com.fitlink.schedule.repository.RecurrenceRepository;
 import java.time.Clock;
 import java.time.LocalTime;
 import java.util.List;
+import java.util.Map;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -45,7 +47,8 @@ public class RecurrenceService {
 	// 오픈 범위 안의 회차를 만든다. 이미 그 상태면 아무것도 하지 않는다
 	@Transactional
 	public Recurrence setActive(long instructorId, long id, boolean active) {
-		Recurrence current = recurrences.findForUpdate(instructorId, id).orElseThrow(NotFoundException::new);
+		Recurrence current = recurrences.findForUpdate(instructorId, id)
+			.orElseThrow(() -> new FitlinkException(CommonErrorCode.NOT_FOUND));
 		if (current.active() == active) {
 			return current;
 		}
@@ -75,7 +78,7 @@ public class RecurrenceService {
 			.sorted()
 			.toList();
 		if (!taken.isEmpty()) {
-			throw new RecurrenceDuplicateException(taken);
+			throw new FitlinkException(ScheduleErrorCode.RECURRENCE_DUPLICATE, Map.of("weekdays", taken));
 		}
 	}
 
