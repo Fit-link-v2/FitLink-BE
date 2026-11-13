@@ -110,14 +110,34 @@ public class SlotRepository {
 			.optional();
 	}
 
-	// 읽고 판정한 뒤 다른 요청이 끼어들 수 있어, 판정한 조건을 WHERE에 다시 건다. 바꿨으면 true.
-	// 같은 시각에 휴강 아닌 수업이 있으면 class_slot_time_uidx 위반으로 DuplicateKeyException이 난다
-	public boolean changeTime(long instructorId, long id, OffsetDateTime startsAt, OffsetDateTime now) {
+	// 강사가 직접 여는 일회성 수업. 같은 시각에 휴강 아닌 수업이 있으면 class_slot_time_uidx 위반으로
+	// DuplicateKeyException이 난다. 회차 생성과 달리 건너뛰지 않고 강사에게 알린다
+	public long insertOneOff(long instructorId, LocalDate occursOn, OffsetDateTime startsAt, int capacity) {
 		return jdbc.sql("""
-				UPDATE class_slot SET starts_at = :startsAt
+				INSERT INTO class_slot (instructor_id, occurs_on, starts_at, capacity)
+				VALUES (:instructorId, :occursOn, :startsAt, :capacity)
+				RETURNING id
+				""")
+			.param("instructorId", instructorId)
+			.param("occursOn", occursOn)
+			.param("startsAt", startsAt)
+			.param("capacity", capacity)
+			.query(Long.class)
+			.single();
+	}
+
+	// 읽고 판정한 뒤 다른 요청이 끼어들 수 있어, 판정한 조건을 WHERE에 다시 건다. 바꿨으면 true.
+	// 날짜(occurs_on)는 일회성 수업만 옮긴다. 반복 회차는 규칙의 요일을 따라야 해 같은 날짜일 때만 바꾼다.
+	// 같은 시각에 휴강 아닌 수업이 있으면 class_slot_time_uidx 위반으로 DuplicateKeyException이 난다
+	public boolean changeTime(long instructorId, long id, LocalDate occursOn, OffsetDateTime startsAt,
+			OffsetDateTime now) {
+		return jdbc.sql("""
+				UPDATE class_slot SET occurs_on = :occursOn, starts_at = :startsAt
 				 WHERE id = :id AND instructor_id = :instructorId
 				   AND canceled_at IS NULL AND starts_at > :now AND taken = 0
+				   AND (recurrence_id IS NULL OR occurs_on = :occursOn)
 				""")
+			.param("occursOn", occursOn)
 			.param("startsAt", startsAt)
 			.param("id", id)
 			.param("instructorId", instructorId)
