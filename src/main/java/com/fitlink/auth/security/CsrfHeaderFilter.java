@@ -1,6 +1,6 @@
 package com.fitlink.auth.security;
 
-import com.fitlink.common.exception.ErrorResponse;
+import com.fitlink.auth.exception.AuthErrorCode;
 import com.fitlink.common.exception.ErrorResponseWriter;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -8,7 +8,6 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.util.Set;
-import org.springframework.http.HttpStatus;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 /**
@@ -33,8 +32,7 @@ class CsrfHeaderFilter extends OncePerRequestFilter {
 			chain.doFilter(request, response);
 			return;
 		}
-		errors.write(response, HttpStatus.FORBIDDEN,
-				new ErrorResponse("CSRF_HEADER_MISSING", "X-CSRF 헤더가 필요합니다."));
+		errors.write(response, AuthErrorCode.CSRF_HEADER_MISSING);
 	}
 
 }

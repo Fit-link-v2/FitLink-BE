@@ -1,10 +1,10 @@
 package com.fitlink.schedule.service;
 
+import com.fitlink.common.exception.CommonErrorCode;
+import com.fitlink.common.exception.FitlinkException;
+import com.fitlink.common.exception.InvalidRequestException;
 import com.fitlink.instructor.InstructorFacade;
-import com.fitlink.schedule.exception.InvalidRequestException;
-import com.fitlink.schedule.exception.NotFoundException;
-import com.fitlink.schedule.exception.SlotRejectedException;
-import com.fitlink.schedule.exception.SlotRejectedException.Reason;
+import com.fitlink.schedule.exception.ScheduleErrorCode;
 import com.fitlink.schedule.model.ScheduleZone;
 import com.fitlink.schedule.model.Slot;
 import com.fitlink.schedule.model.UpcomingSlots;
@@ -67,7 +67,7 @@ public class SlotService {
 				throw new InvalidRequestException("startTime", "지금 이후 시각으로 옮긴다");
 			}
 			if (slot.taken() > 0) {
-				throw new SlotRejectedException(Reason.SLOT_HAS_BOOKINGS);
+				throw new FitlinkException(ScheduleErrorCode.SLOT_HAS_BOOKINGS);
 			}
 			if (slots.changeTime(instructorId, id, startsAt, now)) {
 				return owned(instructorId, id);
@@ -101,16 +101,16 @@ public class SlotService {
 	}
 
 	private Slot owned(long instructorId, long id) {
-		return slots.find(instructorId, id).orElseThrow(NotFoundException::new);
+		return slots.find(instructorId, id).orElseThrow(() -> new FitlinkException(CommonErrorCode.NOT_FOUND));
 	}
 
 	// 휴강했거나 시작한 수업은 더 바꿀 수 없다
 	private static void rejectClosed(Slot slot, OffsetDateTime now) {
 		if (slot.canceled()) {
-			throw new SlotRejectedException(Reason.SLOT_CANCELED);
+			throw new FitlinkException(ScheduleErrorCode.SLOT_CANCELED);
 		}
 		if (slot.startedAt(now)) {
-			throw new SlotRejectedException(Reason.CLASS_STARTED);
+			throw new FitlinkException(ScheduleErrorCode.CLASS_STARTED);
 		}
 	}
 

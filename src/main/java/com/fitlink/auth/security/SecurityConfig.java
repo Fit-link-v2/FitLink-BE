@@ -1,13 +1,12 @@
 package com.fitlink.auth.security;
 
-import com.fitlink.common.exception.ErrorResponse;
+import com.fitlink.auth.exception.AuthErrorCode;
 import com.fitlink.common.exception.ErrorResponseWriter;
 import jakarta.servlet.DispatcherType;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
-import org.springframework.http.HttpStatus;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
@@ -41,7 +40,7 @@ class SecurityConfig {
 				.requestMatchers(HttpMethod.POST, "/auth/logout").permitAll()
 				.anyRequest().authenticated())
 			.exceptionHandling(ex -> ex.authenticationEntryPoint((request, response, e) -> errors.write(response,
-					HttpStatus.UNAUTHORIZED, new ErrorResponse("UNAUTHENTICATED", "로그인이 필요합니다."))))
+					AuthErrorCode.UNAUTHENTICATED)))
 			.build();
 	}
 

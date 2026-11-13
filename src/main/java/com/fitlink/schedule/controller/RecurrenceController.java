@@ -1,10 +1,10 @@
 package com.fitlink.schedule.controller;
 
+import com.fitlink.common.exception.InvalidRequestException;
 import com.fitlink.schedule.dto.Items;
 import com.fitlink.schedule.dto.RecurrenceActiveRequest;
 import com.fitlink.schedule.dto.RecurrenceRegisterRequest;
 import com.fitlink.schedule.dto.RecurrenceResponse;
-import com.fitlink.schedule.exception.InvalidRequestException;
 import com.fitlink.schedule.service.RecurrenceService;
 import jakarta.validation.Valid;
 import java.util.HashSet;
