@@ -193,7 +193,7 @@ criteria:
     description: "반복 회차는 그 회차의 시각만 같은 날 안에서 바꾼다"
     type: behavior
     layers: [api, test]
-    assertion: "PATCH /instructor/slots/{id} { startTime: 19:30 } → 200, 그 슬롯의 starts_at만 같은 날 19:30이고 occurs_on · 규칙 · 다른 주 회차는 그대로다. 휴강한 슬롯 → 422 SLOT_CANCELED, 시작한 슬롯 → 422 CLASS_STARTED, 새 시각이 지금 이전 · 반복 회차에 date → 400(fields), taken > 0 → 422 SLOT_HAS_BOOKINGS, 같은 시각 수업 있음 → 409 SLOT_TIME_TAKEN. 둘 이상 해당하면 이 순서의 앞 것이다"
+    assertion: "PATCH /instructor/slots/{id} { startTime: 19:30 } → 200, 그 슬롯의 starts_at만 같은 날 19:30이고 occurs_on · 규칙 · 다른 주 회차는 그대로다. 휴강한 슬롯 → 422 SLOT_CANCELED, 시작한 슬롯 → 422 CLASS_STARTED, 반복 회차에 다른 날짜(date) · 새 시각이 지금 이전 → 400(fields), taken > 0 → 422 SLOT_HAS_BOOKINGS, 같은 시각 수업 있음 → 409 SLOT_TIME_TAKEN. 둘 이상 해당하면 이 순서의 앞 것이다"
     priority: must
     verify: machine
     status: active
@@ -213,7 +213,7 @@ criteria:
     description: "일회성 수업은 지금 이후 · 오픈 범위 안에 열고, 날짜까지 옮길 수 있다"
     type: behavior
     layers: [schema, api, test]
-    assertion: "POST /instructor/slots { date, startTime, capacity } → 201 SlotDetail, recurrence null, class_slot 1행(recurrence_id null, occurs_on = date). 시작 시각이 지금 이전 → 400(startTime), 날짜가 [오늘, 오늘 + N일) 밖 → 400(date), capacity 0 · 51 → 400(capacity). PATCH { date, startTime }으로 다른 날로 옮기면 starts_at · occurs_on이 같이 바뀌고, 새 날짜가 범위 밖이면 400(date), taken > 0이면 AC-18과 같은 코드로 거부한다. date 없이 startTime만 바꾸면 범위를 보지 않는다(범위를 줄여 범위 밖에 남은 일회성 수업도 시각은 바뀐다)"
+    assertion: "POST /instructor/slots { date, startTime, capacity } → 201 SlotDetail, recurrence null, class_slot 1행(recurrence_id null, occurs_on = date). 시작 시각이 지금 이전 → 400(startTime), 날짜가 [오늘, 오늘 + N일) 밖 → 400(date), capacity 0 · 51 → 400(capacity). PATCH { date, startTime }으로 다른 날로 옮기면 starts_at · occurs_on이 같이 바뀌고, 새 날짜가 범위 밖이면 400(date), taken > 0이면 AC-18과 같은 코드로 거부한다. date 없이(또는 지금과 같은 date로) startTime만 바꾸면 범위를 보지 않는다(범위를 줄여 범위 밖에 남은 일회성 수업도 시각은 바뀐다)"
     priority: must
     verify: machine
     status: active

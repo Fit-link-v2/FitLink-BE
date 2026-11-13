@@ -305,12 +305,12 @@ flowchart LR
 
 ### 2.7 일회성 수업
 
-- [ ] RED: `[BE-0001 AC-20] 등록 → 201, recurrence null, occurs_on = date`
-- [ ] RED: `[BE-0001 AC-20] 지난 시각 · 범위 밖 날짜 · capacity 0 · 51 → 400 fields`
-- [ ] RED: `[BE-0001 AC-15] 반복 회차와 같은 시각 → 409 SLOT_TIME_TAKEN, 휴강한 시각은 허용, 다른 강사는 같은 시각 허용`
-- [ ] RED: `[BE-0001 AC-20] PATCH date로 다른 날로 옮기면 starts_at · occurs_on 같이 바뀜, 새 날짜가 범위 밖이면 400`, `범위를 줄여 범위 밖에 남은 일회성 수업도 startTime만은 바뀐다`
-- [ ] GREEN: `POST /instructor/slots`, `PATCH`의 `date` 처리
-- [ ] REFACTOR: 등록 · 수정의 입력 검사 공유
+- [x] RED: `[BE-0001 AC-20] 등록 → 201, recurrence null, occurs_on = date`
+- [x] RED: `[BE-0001 AC-20] 지난 시각 · 범위 밖 날짜 · capacity 0 · 51 → 400 fields`
+- [x] RED: `[BE-0001 AC-15] 반복 회차와 같은 시각 → 409 SLOT_TIME_TAKEN, 휴강한 시각은 허용, 다른 강사는 같은 시각 허용`
+- [x] RED: `[BE-0001 AC-20] PATCH date로 다른 날로 옮기면 starts_at · occurs_on 같이 바뀜, 새 날짜가 범위 밖이면 400`, `범위를 줄여 범위 밖에 남은 일회성 수업도 startTime만은 바뀐다`
+- [x] GREEN: `POST /instructor/slots`, `PATCH`의 `date` 처리 — 등록은 INSERT의 `class_slot_time_uidx` 위반을 409로 바꾼다(공통 처리기의 제약 대응표). 회차 생성은 돌지 않는다. 조건부 UPDATE가 `occurs_on`도 같이 바꾸고, 반복 회차는 SQL에서도 날짜를 옮기지 못하게 `recurrence_id IS NULL OR occurs_on = 같은 날`을 건다(레포지토리 테스트). 400 안의 순서는 날짜 문제(반복 회차의 date · 범위 밖) → 시각 문제(지금 이전)다. 어제 날짜를 보내면 `startTime`이 아니라 `date`를 준다. 지금 날짜를 그대로 보내면 날짜를 옮기는 것이 아니므로 범위를 보지 않고, 반복 회차도 받는다(FE가 수정 화면에서 date를 늘 보내도 되게. 리뷰 반영으로 AC-18 · prd 문구를 "다른 날짜를 보내면 400"으로 고침). 일회성 수업을 다른 날로 옮기면 비워진 원래 시각에 같은 요일 · 시각 규칙의 회차가 다음 생성 때 생길 수 있다. 휴강과 달리 강사가 그 시각 수업을 없앤 것이 아니므로 규칙대로 채우는 것을 맞는 동작으로 둔다(같은 날 시각만 옮길 때도 2.6부터 같다). 조건을 하나씩 깨면 테스트가 실패하는 것 확인
+- [x] REFACTOR: 등록 · 수정의 입력 검사 공유 — `requireInOpenRange` · `requireAfterNow`. 시각 변경 · 휴강의 "읽고 판정 → 조건부 UPDATE → 0행이면 다시 읽기(3번까지)" 반복문도 `untilApplied` 한 곳으로 모았다
 
 ### 2.8 오픈 범위 설정 `/instructor/settings`
 
