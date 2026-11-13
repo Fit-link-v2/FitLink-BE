@@ -26,3 +26,4 @@ BE 내부 설계 결정. FE와 같이 따르는 결정은 [PRD 레포 `decisions
 | [BE-ADR-0015](0015-hosting-lightsail.md) | BE는 AWS Lightsail 1대에 Docker Compose(Caddy · Spring · PostgreSQL)로 올린다 | accepted |
 | [BE-ADR-0016](0016-auth-module.md) | 로그인 · 세션 코드는 도메인 모듈과 따로 `auth` 모듈에 둔다 | accepted (결정 4 · 5는 BE-ADR-0017로 대체) |
 | [BE-ADR-0017](0017-package-structure.md) | 모듈 안은 역할별 폴더로 나누고, 다른 모듈에는 루트의 Facade 하나만 연다 | accepted |
+| [BE-ADR-0018](0018-error-handling.md) | 에러 처리는 `common`의 처리기 하나가 맡고, 모듈은 에러 코드 enum만 둔다 | accepted |
