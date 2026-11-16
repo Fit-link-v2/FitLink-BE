@@ -56,7 +56,8 @@ class SessionRepositoryTests extends IntegrationTest {
 				  AND (column_name LIKE '%token%' OR column_name LIKE '%secret%' OR column_name LIKE '%access%'
 				       OR column_name LIKE '%refresh%' OR column_name LIKE '%credential%')
 				""").query(String.class).list())
-			.isEmpty();
+			// 회원 링크는 토큰 원본이 아닌 SHA-256만 둔다
+			.containsExactly("member_link.token_hash");
 	}
 
 	@Test
