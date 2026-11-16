@@ -8,7 +8,7 @@
 |---|---|---|---|
 | 1 | PRD-0001 US 1 가입 · 로그인 · 세션 | AC-1 ~ AC-10 | 완료 |
 | 2 | US 2 시간표 · 오픈 범위, 매일 자정 작업 | AC-11 ~ AC-22 | 완료 |
-| 3 | US 3 회원 · US 4 링크 · US 5 개봉 상태 | AC-23 ~ AC-28 | 진행 중 (3.2 완료) |
+| 3 | US 3 회원 · US 4 링크 · US 5 개봉 상태 | AC-23 ~ AC-28 | 진행 중 (3.3 완료) |
 | 4 | US 3 수강권 · 회원 카드 · 월 정액 주기 | 추가 예정 | Phase 3 뒤 작성 |
 
 ### Phase 1 구조
@@ -397,13 +397,13 @@ flowchart LR
 
 ### 3.3 회원 추가 `POST /instructor/members`
 
-- [ ] RED: `[BE-0001 AC-23] '  김OO  ' · '목요반' → 201, name 앞뒤 공백 제거, ACTIVE, linkOpened false, 살아 있는 링크 1행`
-- [ ] RED: `[BE-0001 AC-24] linkUrl = 설정 주소 + /m/ + token, token_hash = SHA-256(token), Cache-Control이 정확히 no-store`
-- [ ] RED: `[BE-0001 AC-23] name 빈 · 공백만 · 51자, memo 501자 → 400 fields, 행 없음`, `memo ''는 null`, `같은 이름 두 번 → 회원 2명`
-- [ ] RED: `[BE-0001 AC-23] 링크 INSERT가 실패하면 회원 행도 없다` (2.8처럼 `member_link`에 `CHECK (false) NOT VALID`를 잠시 건다)
-- [ ] RED: `[BE-0001 AC-23] 로그인하지 않으면 401, X-CSRF 없으면 403`
-- [ ] GREEN: `MemberController`(링크 응답에 `CacheControl.noStore()`. 앱이 `Cache-Control`을 먼저 쓰면 Security는 기본값을 덮어쓰지 않는다) · `MemberService`(한 트랜잭션: 회원 INSERT → 토큰 생성 → 링크 INSERT) · `MemberRepository` · `MemberLinkRepository` · `MembershipProperties`. 공백만 있는 이름은 지운 뒤 0자라 400이다
-- [ ] REFACTOR: 이름 · 메모 정리(공백 제거 · 빈 메모 null)를 한 곳으로(3.5와 같이 씀)
+- [x] RED: `[BE-0001 AC-23] '  김OO  ' · '목요반' → 201, name 앞뒤 공백 제거, ACTIVE, linkOpened false, 살아 있는 링크 1행`
+- [x] RED: `[BE-0001 AC-24] linkUrl = 설정 주소 + /m/ + token, token_hash = SHA-256(token), Cache-Control이 정확히 no-store`
+- [x] RED: `[BE-0001 AC-23] name 빈 · 공백만 · 51자, memo 501자 → 400 fields, 행 없음`, `memo ''는 null`, `같은 이름 두 번 → 회원 2명`
+- [x] RED: `[BE-0001 AC-23] 링크 INSERT가 실패하면 회원 행도 없다` (2.8처럼 `member_link`에 `CHECK (false) NOT VALID`를 잠시 건다)
+- [x] RED: `[BE-0001 AC-23] 로그인하지 않으면 401, X-CSRF 없으면 403`
+- [x] GREEN: `MemberController`(링크 응답에 `CacheControl.noStore()`. 앱이 `Cache-Control`을 먼저 쓰면 Security는 기본값을 덮어쓰지 않는다) · `MemberService`(한 트랜잭션: 회원 INSERT → 토큰 생성 → 링크 INSERT) · `MemberRepository` · `MemberLinkRepository` · `MembershipProperties`. 공백만 있는 이름은 지운 뒤 0자라 400이다 — 이름 공백 제거 · 빈 메모 null은 요청 record의 생성자에서 하고 Bean Validation이 정리된 값을 검사한다. 길이는 Java 문자(UTF-16) 수라 DB CHECK(코드 포인트 수)보다 엄격하다. 응답은 `AddedMember(Member, IssuedLink)`이고 `IssuedLink.toString`은 주소를 가린다. 회원 화면 주소는 `fitlink.membership.link-base-url`. 변이 4개(`@Transactional` · `noStore` · `strip` · 빈 메모 null)를 모두 테스트가 잡음. 리뷰 반영: 메모 null 응답을 `nullValue()`로 확인, 통과하는 쪽 경계값(공백을 지운 이름 50자 · 메모 500자) 테스트를 더해 `max` 경계 변이도 잡음, 회원 화면 주소 끝의 `/` 금지(`//m/` 방지), 회원 추가 응답 record의 `toString`이 `linkUrl`을 가리게 3.7보다 먼저 고침(로그 검사 테스트는 3.7)
+- [x] REFACTOR: 이름 · 메모 정리(공백 제거 · 빈 메모 null)를 한 곳으로 — 요청 record 생성자 한 곳. 3.5에서 PATCH 요청과 나눠 쓸 방법을 정한다
 
 ### 3.4 회원 목록 · 상세
 
