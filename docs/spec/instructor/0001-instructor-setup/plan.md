@@ -324,10 +324,10 @@ flowchart LR
 
 ### 2.9 매일 자정 · 앱 시작 작업
 
-- [ ] RED: `[BE-0001 AC-16] 강사 2명, Clock을 하루 넘겨 전체 작업을 돌리면 두 강사 모두 범위 끝 날 회차가 생긴다`, `ApplicationReadyEvent를 발행하면 회차가 생긴다`(앱 시작 리스너가 실제로 이어져 있는지)
-- [ ] RED: `[BE-0001 AC-22] 만료 · 로그아웃 미만료 · 유효 세션 중 만료 행만 지워지고, 지운 쿠키는 401`
-- [ ] GREEN: `SlotJobs`(`@Scheduled(cron = "0 0 0 * * *", zone = "Asia/Seoul")` + `ApplicationReadyEvent`), `SessionCleanupJob`, `@EnableScheduling`, `V4__auth_session_expires_idx.sql`. 2.8 리뷰에서 넘어온 틈: 23:59에 오픈 범위를 늘리는 요청이 커밋되기 전에 자정 작업이 돌면, 작업은 커밋된 옛 범위로 만들고 요청은 어제 기준으로 만들어 새 범위의 마지막 하루가 다음 자정까지 빈다. 자정 작업이 `setting`을 `FOR SHARE`로 읽어 막을지 이때 정한다
-- [ ] REFACTOR: cron · zone 값이 AC와 같은지 확인하는 테스트(어노테이션 값을 읽음. 테스트에서는 스케줄 실행을 꺼 두므로). 작업 실패는 로그만 남기고 앱을 멈추지 않는다
+- [x] RED: `[BE-0001 AC-16] 강사 2명, Clock을 하루 넘겨 전체 작업을 돌리면 두 강사 모두 범위 끝 날 회차가 생긴다`, `ApplicationReadyEvent를 발행하면 회차가 생긴다`(앱 시작 리스너가 실제로 이어져 있는지)
+- [x] RED: `[BE-0001 AC-22] 만료 · 로그아웃 미만료 · 유효 세션 중 만료 행만 지워지고, 지운 쿠키는 401`
+- [x] GREEN: `SlotJobs`(`@Scheduled(cron = "0 0 0 * * *", zone = "Asia/Seoul")` + `ApplicationReadyEvent`), `SessionCleanupJob`, `@EnableScheduling`, `V4__auth_session_expires_idx.sql` — 두 작업은 각 모듈의 `service` 폴더에 둔다. `@EnableScheduling`은 `FitlinkApplication` 안의 설정 클래스에 두고 `fitlink.scheduling.enabled`(기본 켜짐)로 끈다. 모듈이 아닌 루트 패키지라 `common`의 허용 목록을 넓히지 않는다. 만료 판정은 세션 확인과 같이 DB의 `now()`로 한다(`expires_at <= now()`). 2.8 리뷰에서 넘어온 자정 틈(23:59에 오픈 범위를 늘리는 요청이 자정 작업보다 늦게 커밋되면 새 범위의 마지막 하루가 다음 실행까지 빔)은 막지 않기로 했다. 드물고 다음 실행이 채운다. 생성 SQL에 `FOR SHARE`를 거는 것으로는 막지 못한다: PostgreSQL은 잠금을 기다린 뒤 이미 펼친 날짜 행만 새 값으로 다시 검사하고 늘어난 날짜 행을 새로 만들지 않는다. 막으려면 별도 잠금 문장과 모듈 간 잠금이 필요해 비용이 더 크다. 리뷰 반영: 스케줄러는 벽시계로 기다릴 시간을 계산해 시계 보정 중 23:59:59.9xx에 일찍 깨어날 수 있으므로, 자정 작업은 1분 뒤 시각의 날짜를 오늘로 쓴다(지금은 그대로). 변이 9개(cron · zone · 실패 삼키기 · 앱 시작 리스너 · 고정된 시계 · 조기 실행 여유 · 로그아웃 행 삭제 · 만료 기준 · 기본 꺼짐)를 모두 테스트가 잡음
+- [x] REFACTOR: cron · zone 값이 AC와 같은지 확인하는 테스트(어노테이션 값을 읽음. 테스트에서는 스케줄 실행을 꺼 두므로). 작업 실패는 로그만 남기고 앱을 멈추지 않는다
 
 ### 2.10 doc-sync
 
