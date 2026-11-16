@@ -26,7 +26,7 @@ class ArchitectureTests {
 	static final JavaClasses classes = new ClassFileImporter().withImportOption(ImportOption.Predefined.DO_NOT_INCLUDE_TESTS)
 		.importPackages("com.fitlink");
 
-	static final List<String> ROOT_SUFFIXES = List.of("Facade", "Command", "Info");
+	static final List<String> ROOT_SUFFIXES = List.of("Facade", "Command", "Info", "Event");
 
 	@Test
 	void 모듈_안은_controller에서_service_repository_방향으로만_부른다() {
@@ -60,7 +60,7 @@ class ArchitectureTests {
 	}
 
 	@Test
-	void 모듈_루트에는_모듈_이름으로_시작하는_Facade_Command_Info만_둔다() {
+	void 모듈_루트에는_모듈_이름으로_시작하는_Facade_Command_Info_Event만_둔다() {
 		classes().that()
 			.resideInAPackage("com.fitlink.*")
 			.and()
@@ -113,7 +113,7 @@ class ArchitectureTests {
 	}
 
 	private static ArchCondition<JavaClass> beModuleEntryType() {
-		return new ArchCondition<>("모듈 이름으로 시작하고 Facade · Command · Info로 끝난다") {
+		return new ArchCondition<>("모듈 이름으로 시작하고 Facade · Command · Info · Event로 끝난다") {
 			@Override
 			public void check(JavaClass type, ConditionEvents events) {
 				String module = type.getPackageName().substring(type.getPackageName().lastIndexOf('.') + 1);
