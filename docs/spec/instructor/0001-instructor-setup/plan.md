@@ -8,7 +8,8 @@
 |---|---|---|---|
 | 1 | PRD-0001 US 1 가입 · 로그인 · 세션 | AC-1 ~ AC-10 | 완료 |
 | 2 | US 2 시간표 · 오픈 범위, 매일 자정 작업 | AC-11 ~ AC-22 | 완료 |
-| 3 ~ | US 3 ~ 5 회원 · 수강권 · 링크 | 추가 예정 | Phase 2 뒤 작성 |
+| 3 | US 3 회원 · US 4 링크 · US 5 개봉 상태 | AC-23 ~ AC-28 | 계획 |
+| 4 | US 3 수강권 · 회원 카드 · 월 정액 주기 | 추가 예정 | Phase 3 뒤 작성 |
 
 ### Phase 1 구조
 
@@ -337,3 +338,108 @@ flowchart LR
 
 - [x] `./gradlew test` 전체 통과(203개), `ModularityTests` 통과
 - [x] local에서 앱을 띄워 규칙 등록 → 슬롯 목록 → 시각 변경 · 휴강 → 일회성 수업 → 오픈 범위 변경을 curl로 한 번씩 — 2026-11-16. 점검용 강사 · 세션은 DB에 직접 넣고 끝난 뒤 지웠다. 앱 시작 회차 생성 로그, 같은 시각 409, 28일로 늘린 뒤 12-01 · 12-08 회차, 6일 400까지 확인
+
+## Phase 3: PRD-0001 US 3 · 4 · 5 — 회원 · 링크 · 개봉 상태
+
+### Phase 3 구조
+
+```mermaid
+flowchart TB
+    subgraph membership["membership 모듈"]
+        MC["controller/MemberController<br/>/instructor/members"]
+        MS["service/MemberService<br/>추가 · 목록 · 상세 · 수정 · 재발급"]
+        LT["model/LinkToken<br/>난수 22자 + SHA-256"]
+        MR["repository/MemberRepository"]
+        LR["repository/MemberLinkRepository"]
+        MP["config/MembershipProperties<br/>회원 화면 주소"]
+    end
+    MC --> MS
+    MS --> LT
+    MS --> MR & LR
+    MC --> MP
+    MR & LR --> DB[("PostgreSQL<br/>member · member_link")]
+```
+
+- 이번 Phase는 `membership` 모듈 하나만 쓴다. 다른 모듈을 부르지 않고, 다른 모듈도 아직 `membership`을 부르지 않으므로 `MembershipFacade`는 만들지 않는다(필요한 Phase에서 만든다)
+- 폴더 구조는 BE-ADR-0017 그대로다(`controller` · `dto` · `service` · `model` · `repository` · `exception` · `config`). 새 구조는 없다
+- `member.instructor_id`는 `instructor` 테이블을 가리키는 외래 키일 뿐이고, Java 코드는 `instructor` 모듈을 부르지 않는다. 강사 id는 Phase 1처럼 `@AuthenticationPrincipal Long`으로 받는다
+- 토큰 생성은 `auth`의 세션 토큰과 비슷하지만 `auth` 안에 package-private로 있고 모듈이 다르므로 `membership`에 따로 둔다. 둘 다 몇 줄이라 공통으로 빼지 않는다
+- 회원 화면 주소는 `fitlink.membership.link-base-url`(local 기본 `http://localhost:5173`)이다. 도메인을 사면 설정만 바꾼다(Q32)
+
+### 테스트 방식
+
+- TRUNCATE 대상은 DB의 테이블 목록에서 읽으므로 새 테이블을 따로 등록하지 않는다(2.1 REFACTOR)
+- `first_opened_at`은 기능 0002가 채운다. 이번 테스트는 SQL로 채운다
+- 격리 테스트는 강사를 2명 만든다. 회원 · 링크를 만드는 도우미는 `ScheduleFixtures`와 같은 방식(SQL 직접 INSERT)으로 `MembershipFixtures`를 둔다
+- PATCH의 "필드가 없음"과 "`null`을 보냄"을 구분해야 한다(AC-27의 `memo: null`은 삭제, 빠진 `memo`는 그대로). 요청 record에 필드마다 "보냈는지"를 담는 방법은 GREEN에서 정한다. 후보는 Jackson `JsonNode`로 받기, 필드별 `Optional` 래퍼다
+
+```mermaid
+flowchart LR
+    T31["3.1 스키마 (V5)"] --> T32["3.2 링크 토큰"] --> T33["3.3 회원 추가"] --> T34["3.4 목록 · 상세"] --> T35["3.5 수정 · 수강 종료"]
+    T33 --> T36["3.6 재발급"]
+    T33 & T36 --> T37["3.7 로그에 토큰 없음"]
+    T35 & T36 & T37 --> T38["3.8 doc-sync"]
+```
+
+### 3.1 스키마 (V5)
+
+- [ ] RED: `[BE-0001 AC-23] member.name 0자 · 51자, memo 501자 INSERT는 CHECK 위반, status는 ACTIVE · ENDED만`
+- [ ] RED: `[BE-0001 AC-28] 한 회원에 revoked_at이 빈 member_link 두 번째 INSERT는 member_link_active_uidx 위반, 끊은 링크는 여러 개여도 된다`
+- [ ] RED: `[BE-0001 AC-24] 같은 token_hash 두 번째 INSERT는 유니크 위반(다른 회원이어도)`
+- [ ] GREEN: `V5__membership.sql`에 `member` · `member_link` · `member_owner_idx` · `member_link_active_uidx`(prd 3.1 DDL 그대로). `token_hash`에 32바이트 길이 CHECK를 더할지 정한다. 부분 유니크 조건(`WHERE revoked_at IS NULL`)을 빼면 테스트가 실패하는 것 확인
+- [ ] REFACTOR: `MembershipFixtures`(강사 · 회원 · 링크를 SQL로 만드는 도우미)
+
+### 3.2 링크 토큰 (LinkToken)
+
+- [ ] RED: `[BE-0001 AC-24] 토큰은 [A-Za-z0-9_-] 22자이고 해시는 SHA-256 32바이트`, `두 번 만든 토큰이 다르다`
+- [ ] GREEN: `model/LinkToken(String raw, byte[] hash)`. `SecureRandom` 16바이트 → base64url(패딩 없음). 해시는 `MessageDigest` SHA-256. `toString`은 원본을 내보내지 않는다
+- [ ] REFACTOR: 없음이면 건너뜀
+
+### 3.3 회원 추가 `POST /instructor/members`
+
+- [ ] RED: `[BE-0001 AC-23] '  김OO  ' · '목요반' → 201, name 앞뒤 공백 제거, ACTIVE, linkOpened false, 살아 있는 링크 1행`
+- [ ] RED: `[BE-0001 AC-24] linkUrl = 설정 주소 + /m/ + token, token_hash = SHA-256(token), Cache-Control이 정확히 no-store`
+- [ ] RED: `[BE-0001 AC-23] name 빈 · 공백만 · 51자, memo 501자 → 400 fields, 행 없음`, `memo ''는 null`, `같은 이름 두 번 → 회원 2명`
+- [ ] RED: `[BE-0001 AC-23] 링크 INSERT가 실패하면 회원 행도 없다` (2.8처럼 `member_link`에 `CHECK (false) NOT VALID`를 잠시 건다)
+- [ ] RED: `[BE-0001 AC-23] 로그인하지 않으면 401, X-CSRF 없으면 403`
+- [ ] GREEN: `MemberController`(링크 응답에 `CacheControl.noStore()`. 앱이 `Cache-Control`을 먼저 쓰면 Security는 기본값을 덮어쓰지 않는다) · `MemberService`(한 트랜잭션: 회원 INSERT → 토큰 생성 → 링크 INSERT) · `MemberRepository` · `MemberLinkRepository` · `MembershipProperties`. 공백만 있는 이름은 지운 뒤 0자라 400이다
+- [ ] REFACTOR: 이름 · 메모 정리(공백 제거 · 빈 메모 null)를 한 곳으로(3.5와 같이 씀)
+
+### 3.4 회원 목록 · 상세
+
+- [ ] RED: `[BE-0001 AC-25] 미개봉 ACTIVE 나 · 가, 개봉 ACTIVE 다, 미개봉 ENDED 라, 개봉 ENDED 마 → unopenedCount 2, 순서 가 나 다 라 마, 다른 강사 회원 없음`
+- [ ] RED: `[BE-0001 AC-25] 같은 이름 두 명은 id 순`, `연 링크를 재발급하면 linkOpened false이고 unopenedCount에 들어간다`
+- [ ] RED: `[BE-0001 AC-26] 상세 → MemberDetail, 다른 강사 · 없는 id → 같은 404, id가 숫자가 아니면 400`
+- [ ] GREEN: 목록은 쿼리 하나(`member` LEFT JOIN 살아 있는 `member_link`)로 `linkOpened`와 정렬을 SQL에서 한다. `unopenedCount`는 같은 결과에서 센다. 이름순은 DB 정렬 규칙(collation)을 따르는데, 테스트 DB와 운영 DB의 정렬 규칙이 다르면 순서가 달라질 수 있으므로 `COLLATE "C"`(유니코드 코드 순. 한글 음절은 가나다 순)를 명시할지 이때 정한다
+- [ ] REFACTOR: 목록 · 상세 응답 record 정리
+
+### 3.5 수정 · 수강 종료 · 다시 활성화 `PATCH /instructor/members/{id}`
+
+- [ ] RED: `[BE-0001 AC-27] memo만 보내면 memo만 바뀐다`, `name null → 400`, `name '' · 51자 → 400`, `memo null · '' → null`
+- [ ] RED: `[BE-0001 AC-27] ENDED → 행 · 링크 그대로, 다시 ACTIVE`, `status DELETED · null → 400`, `{} → 200 그대로`, `ENDED에 ENDED → 200`, `다른 강사 id → 404, 그 회원 그대로`
+- [ ] GREEN: 보낸 필드만 SET하는 UPDATE(`WHERE id = ? AND instructor_id = ?`), 0행이면 404. "보냈는지"를 구분하는 방법을 여기서 정한다
+- [ ] REFACTOR: 없음이면 건너뜀
+
+### 3.6 링크 재발급 `POST /instructor/members/{id}/link`
+
+- [ ] RED: `[BE-0001 AC-28] 재발급 → 201, 이전 링크 revoked_at, 새 링크 first_opened_at 비어 있음, 회원 id 그대로`
+- [ ] RED: `[BE-0001 AC-28] ENDED 회원도 201`, `다른 강사 id → 404, 링크 그대로`
+- [ ] RED: `[BE-0001 AC-28] 같은 회원에게 두 요청을 동시에 → 둘 다 201, 살아 있는 링크 1개` (스레드 2개 + `CountDownLatch`)
+- [ ] GREEN: 한 트랜잭션: 회원 행 `SELECT … FOR NO KEY UPDATE`(소유자 조건, 0행이면 404) → 살아 있는 링크 `revoked_at = now()` → 새 링크 INSERT. 잠금이 없으면 동시 요청 하나가 `member_link_active_uidx`에 걸려 500이 되는지 변이로 확인한다
+- [ ] REFACTOR: 회원 추가와 재발급의 "토큰 생성 → INSERT → linkUrl 조립"을 한 메서드로
+
+### 3.7 로그에 토큰이 없다
+
+- [ ] RED: `[BE-0001 AC-24] 로그를 TRACE로 낮추고 회원 추가 · 재발급을 한 뒤 출력 전체에 token이 없다` (`SecretLoggingTests`와 같은 방식)
+- [ ] GREEN: Spring MVC는 응답을 쓸 때 본문 객체의 `toString`을 DEBUG에서는 100자까지, TRACE에서는 전체를 남긴다. 링크를 담는 응답 record의 `toString`이 `linkUrl`을 가린다. logger 수준을 설정에서 INFO로 묶는 방법은 쓰지 않는다. 운영에서 그 logger를 직접 낮추면 다시 찍히기 때문이다. `toString` 재정의를 빼면 테스트가 실패하는 것 확인
+- [ ] REFACTOR: 없음이면 건너뜀
+
+### 3.8 doc-sync
+
+- [ ] REFACTOR: 회원 `POLICY.md` 규칙 절 · `data-model.md`, `overview.md`(필요하면), `feature.yaml`, prd 3.1 AC 대 제약 표, `application.yml` 설정 설명
+
+## Phase 3 끝난 뒤 확인
+
+- [ ] `./gradlew test` 전체 통과, `ModularityTests` 통과
+- [ ] local에서 앱을 띄워 회원 추가 → 목록 → 수정 · 수강 종료 → 재발급을 curl로 한 번씩. 응답의 `linkUrl` 토큰이 앱 로그에 없는지 확인
+

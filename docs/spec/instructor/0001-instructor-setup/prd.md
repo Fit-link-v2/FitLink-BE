@@ -22,13 +22,16 @@
 |---|---|---|---|
 | 1 | US 1 가입 · 로그인 · 세션 | AC-1 ~ AC-10 | 이 문서에서 확정 |
 | 2 | US 2 시간표 · 오픈 범위, 매일 자정 작업(회차 채우기 · 만료 세션 삭제) | AC-11 ~ AC-22 | 이 문서에서 확정 |
-| 3 ~ | US 3 회원 · 수강권 · US 4 링크 · US 5 개봉 상태 | 추가 예정 | 3절 설계. AC 작성 전 |
+| 3 | US 3 회원(AC 3.1 · 3.3) · US 4 링크 · US 5 개봉 상태 | AC-23 ~ AC-28 | 이 문서에서 확정 |
+| 4 | US 3 수강권(AC 3.2) · 회원 목록 · 상세의 수강권 카드 · 월 정액 주기 생성 | 추가 예정 | 3절 설계. AC 작성 전 |
 
-baseline 동결은 Phase 단위로 한다. Phase 1의 AC-1 ~ AC-10은 plan 승인 뒤 바꾸지 않는다. Phase 2 이후 AC는 번호를 이어서 더하고 그때 다시 baseline을 커밋한다. Phase 2는 AC-11 ~ AC-22다.
+baseline 동결은 Phase 단위로 한다. Phase 1의 AC-1 ~ AC-10은 plan 승인 뒤 바꾸지 않는다. Phase 2 이후 AC는 번호를 이어서 더하고 그때 다시 baseline을 커밋한다. Phase 2는 AC-11 ~ AC-22, Phase 3은 AC-23 ~ AC-28이다.
+
+회원 · 링크(Phase 3)와 수강권(Phase 4)을 나눈 이유는 모듈이다. Phase 3은 `membership` 모듈만 쓰고, 수강권 카드를 회원 응답에 붙이는 방법(`membership`이 `entitlement`를 부를 수 없다)은 Phase 4 plan에서 정한다.
 
 ```mermaid
 flowchart LR
-    P1["Phase 1<br/>가입 · 로그인 · 세션<br/>auth · instructor"] --> P2["Phase 2<br/>시간표 · 오픈 범위 · 자정 작업<br/>schedule · instructor · auth"] --> P3["Phase 3 ~<br/>회원 · 수강권 · 링크<br/>membership · entitlement"]
+    P1["Phase 1<br/>가입 · 로그인 · 세션<br/>auth · instructor"] --> P2["Phase 2<br/>시간표 · 오픈 범위 · 자정 작업<br/>schedule · instructor · auth"] --> P3["Phase 3<br/>회원 · 링크 · 개봉 상태<br/>membership"] --> P4["Phase 4<br/>수강권 · 카드 · 월 정액 주기<br/>entitlement"]
     Q["보류한 열린 질문<br/>Q30 · Q32 도메인"] -.->|배포 전| P3
 ```
 
@@ -247,6 +250,72 @@ flowchart LR
     O["일회성 수업 등록 · 수정<br/>(AC-20)"] --> DB
     E["회차 시각 변경 · 휴강<br/>(AC-18 · AC-19)"] --> DB
     DB --> L["강사 슬롯 목록 · 상세<br/>(AC-17)"]
+```
+
+### Phase 3. 회원 · 링크 · 개봉 상태
+
+근거는 PRD-0001 US 3(AC 3.1 · 3.3), US 4, US 5다. 수강권 등록(AC 3.2)과 회원 응답의 수강권 카드(`frontCard` · `cards`), ENDED 회원의 수강권 등록 거부(AC 3.3.4 앞부분)는 Phase 4에서 더한다. 링크를 열 때 `first_opened_at`을 채우는 쪽은 기능 0002(회원 화면)라서, 이 Phase의 테스트는 그 값을 SQL로 채운다. 모든 강사 API는 다른 강사의 회원을 목록에 넣지 않고, 다른 강사의 `{id}`는 없는 id와 같은 404다(PRD-0001 AC 1.3.1 · 1.3.2).
+
+### AC-23. 회원은 이름만으로 추가되고 그 자리에서 링크가 발급된다
+
+근거: PRD-0001 AC 3.1.1 ~ 3.1.3, Q31
+
+- [ ] `POST /instructor/members` `{ name, memo }`는 회원 1행과 살아 있는 링크 1행을 한 트랜잭션에서 만들고 201 `{ member: MemberDetail, linkUrl }`을 준다. 새 회원은 ACTIVE, `linkOpened: false`다
+- [ ] `name`은 앞뒤 공백을 지운 뒤 1 ~ 50자, `memo`는 500자 이하다. 빈 문자열 `memo`는 `null`로 저장한다. 어기면 400 VALIDATION_FAILED이고 아무것도 저장하지 않는다
+- [ ] 같은 이름의 회원을 또 추가할 수 있다(동명이인)
+
+### AC-24. 링크 토큰은 22자 난수이고 서버에는 해시만 남는다
+
+근거: PRD-0001 AC 4.1.1 ~ 4.1.3 · 4.4.1, Q32
+
+- [ ] `linkUrl`은 `{회원 화면 주소}/m/{token}`이다. `token`은 16바이트 암호학적 난수의 base64url(패딩 없음) 22자이고, 회원 화면 주소는 설정값이다
+- [ ] `member_link.token_hash`는 `token`의 SHA-256 32바이트다. 토큰 원본은 DB에 없다
+- [ ] 링크를 주는 응답(회원 추가 · 재발급)의 `Cache-Control`은 정확히 `no-store`다. 컨트롤러가 직접 붙인다(Spring Security가 모든 응답에 붙이는 기본값 `no-cache, no-store, …`에 기대지 않는다)
+- [ ] 회원 추가 · 재발급 흐름의 로그(TRACE 포함)에 토큰 원본이 없다
+
+### AC-25. 회원 목록은 링크를 열지 않은 ACTIVE 회원이 먼저다
+
+근거: PRD-0001 AC 1.3.1 · 5.1.1 · 5.1.3 · 5.1.5 · 5.1.7, Q22
+
+- [ ] `GET /instructor/members`는 `{ unopenedCount, items: [MemberSummary] }`이고 자기 회원만 준다
+- [ ] `linkOpened`는 살아 있는 링크의 `first_opened_at`이 있는지다. 재발급 전 링크를 열었어도 새 링크를 열지 않았으면 `false`다
+- [ ] `unopenedCount`는 `linkOpened`가 `false`인 ACTIVE 회원 수다. ENDED 회원은 세지 않는다
+- [ ] 순서는 링크를 열지 않은 ACTIVE → 나머지 ACTIVE → ENDED이고, 묶음 안은 이름순, 같은 이름은 `id` 순이다. ENDED는 링크를 열지 않았어도 마지막 묶음이다
+
+### AC-26. 회원 상세는 다른 강사의 회원이면 404다
+
+근거: PRD-0001 AC 1.3.2
+
+- [ ] `GET /instructor/members/{id}`는 `MemberDetail { id, name, memo, status, linkOpened }`다. 다른 강사의 id와 없는 id는 같은 404 NOT_FOUND다
+
+### AC-27. 이름 · 메모를 고치고 수강 종료 · 다시 활성화할 수 있다
+
+근거: PRD-0001 AC 3.1.4 · 3.3.1 · 3.3.3, Q29
+
+- [ ] `PATCH /instructor/members/{id}`는 보낸 필드만 바꾸고 200 `MemberDetail`을 준다. 빠진 필드는 그대로다
+- [ ] `name: null`은 400이다. `memo: null` · `""`은 메모를 지운다. 길이 검사는 AC-23과 같다. `status`는 `ACTIVE` · `ENDED`만 받고 `status: null`은 400이다
+- [ ] 빈 본문 `{}`은 200이고 아무것도 바뀌지 않는다. 이미 ENDED인 회원에 ENDED를 다시 보내도 200이다
+- [ ] ENDED로 바꿔도 회원 행과 링크는 그대로이고, 다시 ACTIVE로 되돌릴 수 있다. 회원을 지우는 API는 없다
+
+### AC-28. 링크를 재발급하면 이전 링크는 끊기고 개봉 상태는 처음으로 돌아간다
+
+근거: PRD-0001 AC 4.3.1 · 4.3.2 · 3.3.4 · 5.1.3
+
+- [ ] `POST /instructor/members/{id}/link`는 살아 있는 링크에 `revoked_at`을 채우고 새 링크를 만들어 201 `{ linkUrl }`을 준다. 회원 id는 그대로다
+- [ ] 새 링크는 `first_opened_at`이 비어 있어 `linkOpened`가 `false`로 돌아간다
+- [ ] ENDED 회원도 재발급된다
+- [ ] 한 회원에게 살아 있는 링크는 늘 하나다. 같은 회원에게 재발급이 동시에 와도 하나만 남는다
+
+### Phase 3 흐름
+
+```mermaid
+flowchart LR
+    A["회원 추가<br/>(AC-23)"] --> T["토큰 생성<br/>원본은 응답에만, DB에는 SHA-256<br/>(AC-24)"]
+    R["링크 재발급<br/>(AC-28)"] -->|"이전 링크 revoked_at"| T
+    T --> DB[("member · member_link")]
+    P["이름 · 메모 수정 · 수강 종료 · 다시 활성화<br/>(AC-27)"] --> DB
+    O["회원 화면에서 링크 열기<br/>(기능 0002)"] -.->|"first_opened_at"| DB
+    DB --> L["회원 목록 · 상세<br/>(AC-25 · AC-26)"]
 ```
 
 ## 3. 기술 설계
@@ -737,7 +806,7 @@ ALTER TABLE entitlement ADD CONSTRAINT entitlement_kind_no_overlap
 | 1 · AC 2.3.1 | 휴강. 예약이 있으면 확인 창 | `class_slot.canceled_at` + `booking.cancel_reason` (처리는 write-paths 5.2) |
 | 1 · AC 2.3.5 | 예약이 있는 슬롯은 시각 변경 불가 | 조건부 UPDATE `WHERE taken = 0` ([쓰기 경로](../../booking/write-paths.md)) |
 | 1 · AC 2.3.3 | 삭제 · 변경은 해당 슬롯에만 | `recurrence`와 `class_slot`을 분리. 규칙은 안 건드린다 |
-| (일회성 수업, PRD-0001 AC 추가 예정 Q38) | 반복 규칙 없이 한 번만 여는 수업. 지금 이후 · 오픈 범위 안 · 같은 시각 없음 | `class_slot.recurrence_id` NULL 허용 + `class_slot_time_uidx`. 시각 · 범위 검사는 애플리케이션. 규칙이 만든 슬롯의 소유자 일치는 복합 FK `class_slot_recurrence_owner_fk` |
+| 1 · AC 2.5 | 반복 규칙 없이 한 번만 여는 수업. 지금 이후 · 오픈 범위 안 · 같은 시각 없음 | `class_slot.recurrence_id` NULL 허용 + `class_slot_time_uidx`. 시각 · 범위 검사는 애플리케이션. 규칙이 만든 슬롯의 소유자 일치는 복합 FK `class_slot_recurrence_owner_fk` |
 | 1 · AC 2.4.1 | 오픈 범위 7~28일 | `setting` CHECK open_range_days BETWEEN 7 AND 28 |
 | 1 · AC 2.4.2 | 늘리면 즉시 채움, 줄여도 슬롯은 남김 | `InstructorOpenRangeExtendedEvent` 이벤트로 같은 트랜잭션에서 슬롯 생성. 줄일 때는 DELETE 경로 없음 |
 | 1 · AC 3.1.2 | 동명이인 허용 | `member.name`에 UNIQUE 없음 (의도적 부재) |
@@ -841,9 +910,9 @@ ALTER TABLE entitlement ADD CONSTRAINT entitlement_kind_no_overlap
 |---|---|---|---|---|
 | GET | `/instructor/members` | | 200 `{ "unopenedCount": 2, "items": [MemberSummary] }` | |
 | POST | `/instructor/members` | `{ "name": "김OO", "memo": "목요반" }` | 201 `{ "member": MemberDetail, "linkUrl": "https://app.{도메인}/m/{token}" }` | 400 |
-| GET | `/instructor/members/{id}` | | 200 `MemberDetail` | 404 |
+| GET | `/instructor/members/{id}` | | 200 `MemberDetail` | 400, 404 |
 | PATCH | `/instructor/members/{id}` | `{ "name": "김OO", "memo": "화요반", "status": "ENDED" }` 중 바꿀 필드만 | 200 `MemberDetail` | 400, 404 |
-| POST | `/instructor/members/{id}/link` | | 201 `{ "linkUrl": "..." }` | 404 |
+| POST | `/instructor/members/{id}/link` | | 201 `{ "linkUrl": "..." }` | 400, 404 |
 
 ```jsonc
 // MemberSummary
@@ -854,9 +923,9 @@ ALTER TABLE entitlement ADD CONSTRAINT entitlement_kind_no_overlap
   "cards": [EntitlementCard] }
 ```
 
-- 회원 추가: `name` 필수(앞뒤 공백 제거 후 1 ~ 50자), `memo` 선택(500자 이하, 빈 문자열은 null로 저장)(AC 3.1.1), 동명이인 허용(AC 3.1.2). 저장하면서 링크를 발급한다(AC 3.1.3)
-- `linkUrl`은 발급 응답에만 있다(AC 4.1.2). 응답에 `Cache-Control: no-store`, 본문은 로그에 남기지 않는다(AC 4.4.1). 문구 조립과 복사는 FE(AC 4.2.2)
-- 회원 목록: `unopenedCount`는 링크를 열지 않은 ACTIVE 회원 수(AC 5.1.1). `linkOpened`는 살아 있는 링크의 `first_opened_at` 유무(AC 5.1.3 · 5.1.5). 줄의 남은 횟수는 `frontCard`의 큰 글씨다(DEC-0010). 정렬은 미개봉 ACTIVE → 나머지 ACTIVE → ENDED, 묶음 안은 이름순. ENDED는 미개봉이어도 마지막 묶음이다(AC 5.1.1이 미개봉 수에서 ENDED를 빼는 것과 맞춘다)
+- 회원 추가: `name` 필수(앞뒤 공백 제거 후 1 ~ 50자), `memo` 선택(500자 이하, 빈 문자열은 null로 저장)(AC 3.1.1), 동명이인 허용(AC 3.1.2). 저장하면서 링크를 발급한다(AC 3.1.3). 회원 응답의 `frontCard` · `cards`는 Phase 4에서 더한다
+- `linkUrl`은 발급 응답에만 있다(AC 4.1.2). 응답에 `Cache-Control: no-store`(컨트롤러가 직접 붙인다), 본문은 로그에 남기지 않는다(AC 4.4.1). 문구 조립과 복사는 FE(AC 4.2.2)
+- 회원 목록: `unopenedCount`는 링크를 열지 않은 ACTIVE 회원 수(AC 5.1.1). `linkOpened`는 살아 있는 링크의 `first_opened_at` 유무(AC 5.1.3 · 5.1.5). 줄의 남은 횟수는 `frontCard`의 큰 글씨다(DEC-0010). 정렬은 미개봉 ACTIVE → 나머지 ACTIVE → ENDED, 묶음 안은 이름순(같은 이름은 `id` 순). ENDED는 미개봉이어도 마지막 묶음이다(AC 5.1.1이 미개봉 수에서 ENDED를 빼는 것과 맞춘다)
 - 회원 수정: 보낸 필드만 바꾼다. 빠진 필드는 그대로, `memo: null` · `""`은 메모 삭제, `name: null`은 400. 검사는 회원 추가와 같다. 수강 종료 · 다시 활성화는 `status`(AC 3.3.1 · 3.3.3)
 - 재발급: 기존 링크 무효 + 새 링크(AC 4.3.1 · 4.3.2). 회원 행을 먼저 잠근다(`FOR NO KEY UPDATE`). 확인 창 여부는 FE가 `linkOpened`로 판단한다. 두 번 갔으면 마지막 응답의 `linkUrl`만 쓴다. ENDED 회원도 재발급한다. 유출된 링크를 끊는 수단이라 ACTIVE로 되돌리지 않고 바로 할 수 있어야 한다(되돌리면 그 사이 유출된 링크로 예약할 수 있다). 새 링크도 ENDED인 동안에는 예약할 수 없다
 
@@ -988,7 +1057,8 @@ Phase 단위로 나눠 만든다. 번호는 Flyway 파일 이름 `V{번호}__{�
 | 2 | `auth_session` | Phase 1. 로그인 · 세션은 `auth` 모듈이라 파일을 나눴다(BE-ADR-0016) |
 | 3 | `recurrence`, `class_slot` | Phase 2. `schedule` 모듈 |
 | 4 | `auth_session (expires_at)` 인덱스 | Phase 2. 만료 세션 삭제(AC-22)용. `auth` 모듈 파일 |
-| 5 ~ | `btree_gist` 확장, `member`, `member_link`, `subscription`, `entitlement` | Phase 3 이후. 단위는 그 Phase의 plan에서 정한다 |
+| 5 | `member`, `member_link` | Phase 3. `membership` 모듈 |
+| 6 ~ | `btree_gist` 확장, `subscription`, `entitlement` | Phase 4. 단위는 그 Phase의 plan에서 정한다 |
 
 `cancel_deadline_hours`는 기능 0005의 마이그레이션에서 붙는다. 1차 배포에는 PRD 1 ~ 3이 함께 나간다.
 
