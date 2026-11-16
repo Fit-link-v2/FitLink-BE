@@ -113,6 +113,16 @@ class SlotChangeApiTests extends IntegrationTest {
 		assertThat(occursOn(slot)).isEqualTo(LocalDate.of(2026, 11, 18));
 	}
 
+	// FE가 수정 화면에서 date를 늘 보내도 되도록 지금과 같은 날짜는 받는다
+	@Test
+	void 반복_회차에_지금과_같은_date를_보내면_시각만_바뀐다() throws Exception {
+		long rule = given.recurrence(instructorId, WEDNESDAY, "20:00", 8, true);
+		long slot = given.slot(instructorId, rule, "2026-11-18", "2026-11-18T20:00:00+09:00", null);
+
+		change(slot, "{ \"startTime\": \"19:30\", \"date\": \"2026-11-18\" }").andExpect(status().isOk())
+			.andExpect(jsonPath("$.startsAt").value("2026-11-18T19:30:00+09:00"));
+	}
+
 	@Test
 	void 예약이_있으면_같은_시각_수업이_있어도_422_SLOT_HAS_BOOKINGS() throws Exception {
 		long slot = given.slot(instructorId, null, "2026-11-13", "2026-11-13T09:00:00+09:00", null);
@@ -157,6 +167,64 @@ class SlotChangeApiTests extends IntegrationTest {
 		change(others + 100, "{ \"startTime\": \"10:00\" }").andExpect(status().isNotFound());
 
 		assertThat(startsAt(others)).isAtSameInstantAs(OffsetDateTime.parse("2026-11-13T09:00:00+09:00"));
+	}
+
+	@Test
+	void 일회성_수업은_date로_다른_날로_옮기고_starts_at과_occurs_on이_같이_바뀐다() throws Exception {
+		long slot = given.slot(instructorId, null, "2026-11-13", "2026-11-13T09:00:00+09:00", null);
+
+		change(slot, "{ \"startTime\": \"19:00\", \"date\": \"2026-11-20\" }").andExpect(status().isOk())
+			.andExpect(jsonPath("$.startsAt").value("2026-11-20T19:00:00+09:00"));
+
+		assertThat(occursOn(slot)).isEqualTo(LocalDate.of(2026, 11, 20));
+	}
+
+	@Test
+	void 일회성_수업의_새_날짜가_오픈_범위_밖이면_400_date이고_바뀌지_않는다() throws Exception {
+		long slot = given.slot(instructorId, null, "2026-11-13", "2026-11-13T09:00:00+09:00", null);
+
+		change(slot, "{ \"startTime\": \"09:00\", \"date\": \"2026-11-26\" }").andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.fields[0].name").value("date"));
+		change(slot, "{ \"startTime\": \"09:00\", \"date\": \"2026-11-11\" }").andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.fields[0].name").value("date"));
+
+		assertThat(occursOn(slot)).isEqualTo(LocalDate.of(2026, 11, 13));
+		assertThat(startsAt(slot)).isAtSameInstantAs(OffsetDateTime.parse("2026-11-13T09:00:00+09:00"));
+	}
+
+	@Test
+	void 범위를_줄여_범위_밖에_남은_일회성_수업도_시각만은_바꾼다() throws Exception {
+		jdbc.sql("UPDATE setting SET open_range_days = 7 WHERE instructor_id = :id").param("id", instructorId).update();
+		long slot = given.slot(instructorId, null, "2026-11-24", "2026-11-24T09:00:00+09:00", null);
+
+		change(slot, "{ \"startTime\": \"10:00\" }").andExpect(status().isOk())
+			.andExpect(jsonPath("$.startsAt").value("2026-11-24T10:00:00+09:00"));
+		// 지금 날짜를 그대로 보내도 날짜를 옮기는 것이 아니라 범위를 보지 않는다
+		change(slot, "{ \"startTime\": \"11:00\", \"date\": \"2026-11-24\" }").andExpect(status().isOk())
+			.andExpect(jsonPath("$.startsAt").value("2026-11-24T11:00:00+09:00"));
+	}
+
+	@Test
+	void 일회성_수업을_옮긴_날의_같은_시각에_수업이_있으면_409_SLOT_TIME_TAKEN() throws Exception {
+		long slot = given.slot(instructorId, null, "2026-11-13", "2026-11-13T09:00:00+09:00", null);
+		given.slot(instructorId, null, "2026-11-20", "2026-11-20T09:00:00+09:00", null);
+
+		change(slot, "{ \"startTime\": \"09:00\", \"date\": \"2026-11-20\" }").andExpect(status().isConflict())
+			.andExpect(jsonPath("$.code").value("SLOT_TIME_TAKEN"));
+
+		assertThat(occursOn(slot)).isEqualTo(LocalDate.of(2026, 11, 13));
+	}
+
+	@Test
+	void 예약이_있는_일회성_수업은_날짜를_옮겨도_422_SLOT_HAS_BOOKINGS() throws Exception {
+		long slot = given.slot(instructorId, null, "2026-11-13", "2026-11-13T09:00:00+09:00", null);
+		book(slot);
+
+		change(slot, "{ \"startTime\": \"09:00\", \"date\": \"2026-11-20\" }")
+			.andExpect(status().isUnprocessableContent())
+			.andExpect(jsonPath("$.code").value("SLOT_HAS_BOOKINGS"));
+
+		assertThat(occursOn(slot)).isEqualTo(LocalDate.of(2026, 11, 13));
 	}
 
 	@Test

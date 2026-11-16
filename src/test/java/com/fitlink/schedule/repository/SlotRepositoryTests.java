@@ -4,6 +4,7 @@ import com.fitlink.IntegrationTest;
 import com.fitlink.schedule.ScheduleFixtures;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -15,6 +16,8 @@ class SlotRepositoryTests extends IntegrationTest {
 	static final OffsetDateTime NOW = OffsetDateTime.parse("2026-11-12T12:00:00+09:00");
 
 	static final OffsetDateTime LATER = OffsetDateTime.parse("2026-11-13T10:00:00+09:00");
+
+	static final LocalDate LATER_DAY = LocalDate.of(2026, 11, 13);
 
 	@Autowired
 	SlotRepository slots;
@@ -39,11 +42,23 @@ class SlotRepositoryTests extends IntegrationTest {
 		long others = given.slot(given.instructor("2002"), null, "2026-11-13", "2026-11-13T09:00:00+09:00", null);
 		long open = given.slot(instructorId, null, "2026-11-13", "2026-11-13T07:00:00+09:00", null);
 
-		assertThat(slots.changeTime(instructorId, canceled, LATER, NOW)).isFalse();
-		assertThat(slots.changeTime(instructorId, booked, LATER, NOW)).isFalse();
-		assertThat(slots.changeTime(instructorId, started, LATER, NOW)).isFalse();
-		assertThat(slots.changeTime(instructorId, others, LATER, NOW)).isFalse();
-		assertThat(slots.changeTime(instructorId, open, LATER, NOW)).isTrue();
+		assertThat(slots.changeTime(instructorId, canceled, LATER_DAY, LATER, NOW)).isFalse();
+		assertThat(slots.changeTime(instructorId, booked, LATER_DAY, LATER, NOW)).isFalse();
+		assertThat(slots.changeTime(instructorId, started, LATER_DAY, LATER, NOW)).isFalse();
+		assertThat(slots.changeTime(instructorId, others, LATER_DAY, LATER, NOW)).isFalse();
+		assertThat(slots.changeTime(instructorId, open, LATER_DAY, LATER, NOW)).isTrue();
+	}
+
+	// 반복 회차의 날짜는 규칙의 요일을 따라야 한다. 서비스 판정을 지나도 SQL이 날짜를 옮기지 않는다
+	@Test
+	void 시각_변경은_반복_회차의_날짜를_옮기지_않는다() {
+		long rule = given.recurrence(instructorId, 5, "10:00", 8, true);
+		long slot = given.slot(instructorId, rule, "2026-11-13", "2026-11-13T10:00:00+09:00", null);
+
+		assertThat(slots.changeTime(instructorId, slot, LocalDate.of(2026, 11, 14),
+				OffsetDateTime.parse("2026-11-14T10:00:00+09:00"), NOW)).isFalse();
+		assertThat(slots.changeTime(instructorId, slot, LATER_DAY, OffsetDateTime.parse("2026-11-13T11:00:00+09:00"),
+				NOW)).isTrue();
 	}
 
 	@Test

@@ -202,7 +202,7 @@ sequenceDiagram
 근거: PRD-0001 AC 2.3.2 · 2.3.3, Q21
 
 - [ ] `PATCH /instructor/slots/{id}` `{ startTime }`은 그 슬롯의 시각만 같은 날 안에서 바꾼다. 규칙과 다른 주 회차는 그대로다
-- [ ] 판정 순서: 404 → 휴강이면 422 SLOT_CANCELED → 시작했으면 422 CLASS_STARTED → 새 시각이 지금 이전이거나 반복 회차에 `date`를 보냈으면 400 → 예약이 있으면(`taken > 0`) 422 SLOT_HAS_BOOKINGS → 같은 시각 수업이 있으면 409 SLOT_TIME_TAKEN
+- [ ] 판정 순서: 404 → 휴강이면 422 SLOT_CANCELED → 시작했으면 422 CLASS_STARTED → 반복 회차에 다른 날짜(`date`)를 보냈거나 새 시각이 지금 이전이면 400 → 예약이 있으면(`taken > 0`) 422 SLOT_HAS_BOOKINGS → 같은 시각 수업이 있으면 409 SLOT_TIME_TAKEN
 
 ### AC-19. 휴강은 슬롯을 남기고 되돌릴 수 없다
 
@@ -822,7 +822,7 @@ ALTER TABLE entitlement ADD CONSTRAINT entitlement_kind_no_overlap
 - 규칙 끄기는 이후 생성만 멈춘다(AC 2.1.4). 다시 켤 때 같은 요일 · 시각의 켜진 규칙이 있으면 409. 같은 요일 · 시각의 꺼진 규칙이 있는데 새 규칙을 만들거나 다시 켜면, 꺼진 규칙의 오늘 이후 회차를 이어받고 슬롯을 만든다(3.1 시간표 절)
 - 슬롯 목록: 시작 시각이 지금 이후인 슬롯 전부. 휴강한 슬롯도 넣고 `canceledAt`으로 구분한다. 오픈 범위를 줄여 범위 밖에 남은 슬롯도 넣는다. 예약이 걸려 있을 수 있어 강사 눈에서 사라지면 안 된다. 범위 밖인지는 FE가 `openRangeDays`로 가른다. 회원 화면(PRD-0002)은 범위 안 · 휴강 아닌 것만 보여준다
 - 일회성 수업 등록: `capacity` 1 ~ 50, `date` · `startTime` 형식 검사 뒤 400(시작 시각이 지금 이전이면 `startTime`, 날짜가 오픈 범위 밖이면 `date`) → 409 SLOT_TIME_TAKEN 순서. 같은 시각 검사는 INSERT의 유니크 위반으로 한다. 슬롯 생성 쿼리는 돌지 않는다
-- 시각 변경: 그 슬롯만(AC 2.3.2 · 2.3.3). 반복 회차는 날짜를 바꿀 수 없어 `date`를 보내면 400이고, 일회성 수업은 `date`를 바꿀 수 있다(오픈 범위 안). 시작한 슬롯은 시각 변경 · 휴강을 거부한다(Q21). 슬롯을 먼저 읽고 404 → SLOT_CANCELED → CLASS_STARTED → 400(새 시각이 지금 이전, 범위 밖, 반복 회차의 `date`. `fields`로 어느 필드인지 준다) → SLOT_HAS_BOOKINGS → SLOT_TIME_TAKEN 순서로 판정한다. 쓰기는 조건부 UPDATE([예약 쓰기 경로](../../booking/write-paths.md))이고, 읽은 뒤 끼어들어 0행이 되면 다시 읽어 같은 순서로 답한다. 같은 시각 검사는 UPDATE의 유니크 위반으로 한다
+- 시각 변경: 그 슬롯만(AC 2.3.2 · 2.3.3). 반복 회차는 날짜를 바꿀 수 없어 지금과 다른 `date`를 보내면 400이고(같은 날짜는 받는다), 일회성 수업은 `date`를 바꿀 수 있다(오픈 범위 안). 시작한 슬롯은 시각 변경 · 휴강을 거부한다(Q21). 슬롯을 먼저 읽고 404 → SLOT_CANCELED → CLASS_STARTED → 400(반복 회차의 다른 `date`, 새 날짜가 범위 밖, 새 시각이 지금 이전 순. `fields`로 어느 필드인지 준다) → SLOT_HAS_BOOKINGS → SLOT_TIME_TAKEN 순서로 판정한다. 쓰기는 조건부 UPDATE([예약 쓰기 경로](../../booking/write-paths.md))이고, 읽은 뒤 끼어들어 0행이 되면 다시 읽어 같은 순서로 답한다. 같은 시각 검사는 UPDATE의 유니크 위반으로 한다
 - 휴강: 404 → 이미 휴강이면 200(변경 없음, PRD-0003 AC 7.2.4) → CLASS_STARTED. 예약 취소 · 복구와 회원 이름(PRD-0003 AC 7.1.3 · 7.3.4)은 PRD 3에서 붙는다
 - 예약자 명단 · 대기 수는 PRD 3 · 4에서 필드를 더한다
 
