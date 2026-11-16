@@ -843,7 +843,7 @@ ALTER TABLE entitlement ADD CONSTRAINT entitlement_kind_no_overlap
 | POST | `/instructor/members` | `{ "name": "김OO", "memo": "목요반" }` | 201 `{ "member": MemberDetail, "linkUrl": "https://app.{도메인}/m/{token}" }` | 400 |
 | GET | `/instructor/members/{id}` | | 200 `MemberDetail` | 404 |
 | PATCH | `/instructor/members/{id}` | `{ "name": "김OO", "memo": "화요반", "status": "ENDED" }` 중 바꿀 필드만 | 200 `MemberDetail` | 400, 404 |
-| POST | `/instructor/members/{id}/link` | | 201 `{ "linkUrl": "..." }` | 404, 422 MEMBER_ENDED |
+| POST | `/instructor/members/{id}/link` | | 201 `{ "linkUrl": "..." }` | 404 |
 
 ```jsonc
 // MemberSummary
@@ -858,7 +858,7 @@ ALTER TABLE entitlement ADD CONSTRAINT entitlement_kind_no_overlap
 - `linkUrl`은 발급 응답에만 있다(AC 4.1.2). 응답에 `Cache-Control: no-store`, 본문은 로그에 남기지 않는다(AC 4.4.1). 문구 조립과 복사는 FE(AC 4.2.2)
 - 회원 목록: `unopenedCount`는 링크를 열지 않은 ACTIVE 회원 수(AC 5.1.1). `linkOpened`는 살아 있는 링크의 `first_opened_at` 유무(AC 5.1.3 · 5.1.5). 줄의 남은 횟수는 `frontCard`의 큰 글씨다(DEC-0010). 정렬은 미개봉 ACTIVE → 나머지 ACTIVE → ENDED, 묶음 안은 이름순. ENDED는 미개봉이어도 마지막 묶음이다(AC 5.1.1이 미개봉 수에서 ENDED를 빼는 것과 맞춘다)
 - 회원 수정: 보낸 필드만 바꾼다. 빠진 필드는 그대로, `memo: null` · `""`은 메모 삭제, `name: null`은 400. 검사는 회원 추가와 같다. 수강 종료 · 다시 활성화는 `status`(AC 3.3.1 · 3.3.3)
-- 재발급: 기존 링크 무효 + 새 링크(AC 4.3.1 · 4.3.2). 회원 행을 먼저 잠근다(`FOR NO KEY UPDATE`). 확인 창 여부는 FE가 `linkOpened`로 판단한다. 두 번 갔으면 마지막 응답의 `linkUrl`만 쓴다. ENDED 회원은 422 MEMBER_ENDED이고 다시 활성화한 뒤 재발급한다. 잠근 뒤 `status`를 보므로 종료와 재발급이 겹쳐도 한 줄로 선다
+- 재발급: 기존 링크 무효 + 새 링크(AC 4.3.1 · 4.3.2). 회원 행을 먼저 잠근다(`FOR NO KEY UPDATE`). 확인 창 여부는 FE가 `linkOpened`로 판단한다. 두 번 갔으면 마지막 응답의 `linkUrl`만 쓴다. ENDED 회원도 재발급한다. 유출된 링크를 끊는 수단이라 ACTIVE로 되돌리지 않고 바로 할 수 있어야 한다(되돌리면 그 사이 유출된 링크로 예약할 수 있다). 새 링크도 ENDED인 동안에는 예약할 수 없다
 
 #### 5. 수강권 (I-10, I-11)
 
@@ -909,7 +909,7 @@ ALTER TABLE entitlement ADD CONSTRAINT entitlement_kind_no_overlap
 | 409 | RECURRENCE_DUPLICATE | 규칙 등록 · 다시 켜기 | `weekdays` |
 | 409 | SLOT_TIME_TAKEN | 일회성 수업 등록 · 슬롯 시각 변경 | |
 | 422 | SLOT_CANCELED · SLOT_HAS_BOOKINGS | 슬롯 시각 변경 | |
-| 422 | MEMBER_ENDED | 수강권 등록 · 링크 재발급 | |
+| 422 | MEMBER_ENDED | 수강권 등록 | |
 | 422 | ENTITLEMENT_EXPIRED | 잔여 수정(횟수권) | |
 | 422 | CLASS_STARTED | 슬롯 시각 변경 · 휴강. PRD-0003 AC 3.1과 같은 코드 | |
 | 422 | ENTITLEMENT_PERIOD_OVERLAP | 수강권 등록 | |
@@ -1027,7 +1027,7 @@ Phase 단위로 나눠 만든다. 번호는 Flyway 파일 이름 `V{번호}__{�
 | ~~Q25~~ | ~~휴강한 슬롯을 강사 슬롯 목록에 넣나~~ | **해소.** 넣고 `canceledAt`으로 구분한다 |
 | ~~Q26~~ | ~~오픈 범위를 줄인 뒤 범위 밖에 남은 슬롯(AC 2.4.2)을 강사에게 보이나~~ | **해소.** 보인다. 강사 목록은 지금 이후 슬롯 전부다. 회원 화면만 범위 안으로 자른다 |
 | ~~Q27~~ | ~~만료되거나 시작 전인 횟수권의 잔여를 고칠 수 있나~~ | **해소.** 종료일이 지난 횟수권은 거부(422 ENTITLEMENT_EXPIRED), 시작 전은 허용 |
-| ~~Q28~~ | ~~ENDED 회원에게 수강권 등록 · 링크 재발급을 허용하나~~ | **해소.** 둘 다 422 MEMBER_ENDED. 다시 활성화한 뒤 한다 |
+| ~~Q28~~ | ~~ENDED 회원에게 수강권 등록 · 링크 재발급을 허용하나~~ | **해소.** 수강권 등록은 422 MEMBER_ENDED, 다시 활성화한 뒤 한다. 링크 재발급은 허용한다(2026-11-17 변경, 유출 대응. DEC-0012) |
 | ~~Q29~~ | ~~회원 상세에서 이름 · 메모를 고치나~~ | **해소.** 고친다. `PATCH /instructor/members/{id}`가 `name` · `memo` · `status` 중 보낸 필드만 바꾼다 |
 | Q30 | 로그인 성공 · 실패 뒤 이동할 `app.` 경로와 실패를 알리는 방법(예: `?login=failed`) | 콜백 302 목적지. DEC-0008 후속. FE와 정하기 전까지 임시값을 쓴다: 성공 `https://app.{도메인}/`, 실패 `https://app.{도메인}/?login=failed`. 설정값이라 바뀌어도 코드는 그대로다(BE-ADR-0014). 보류: 도메인을 사기 전이라 localhost 값으로 개발한다 |
 | ~~Q31~~ | ~~입력 상한: 이름 · 메모 길이, 횟수권 `maxCount`, 지난 날짜 횟수권 등록~~ | **해소.** 이름 1 ~ 50자, 메모 500자, `maxCount` 1 ~ 999, 월 정액 횟수 1 ~ 99 · 4 ~ 48주. 종료일이 오늘 이전인 수강권은 400, 시작일이 지난 것은 허용. DB CHECK도 건다 |
@@ -1037,4 +1037,4 @@ Phase 단위로 나눠 만든다. 번호는 Flyway 파일 이름 `V{번호}__{�
 | Q35 | 기존 강사가 다시 로그인할 때 카카오 닉네임 · 이메일이 바뀌었으면 갱신하나 | Phase 1은 갱신하지 않는다. 화면에 강사 이름을 쓰는 곳이 생기면 정한다 |
 | ~~Q36~~ | ~~만료 · 로그아웃된 세션 행을 언제 지우나~~ | **해소.** 매일 자정에 만료된 행을 지운다. 로그아웃한 행도 만료가 지나면 지워진다(BE-ADR-0003의 "만료 뒤 지운다"와 같음, 3.1 로그인 세션 절) |
 | Q37 | 이메일 동의를 요청하나 | PRD-0001 AC 1.2.4는 필수 동의로 요청하되 비즈 앱 전환이 막히면 폐기한다. 카카오 앱 콘솔 확인 전이라 Phase 1은 동의 항목 없이 시작하고 `email`은 `null`이다(Q14) |
-| Q38 | 이 문서에서 정한 제품 규칙을 PRD-0001에 AC로 올리기 | 일회성 수업(AC 2.3.2는 아직 "범위에 없다"), 같은 시각 수업 하나, 규칙 이어받기, 잔여 수정 · ENDED 회원 제한, 회원 이름 · 메모 수정, 중도 종료 규칙(Q13). Fit-link-PRD 레포 작업이다 |
+| Q38 | 이 문서에서 정한 제품 규칙을 PRD-0001에 AC로 올리기 | 일회성 수업(AC 2.3.2는 아직 "범위에 없다"), 같은 시각 수업 하나, 규칙 이어받기, 잔여 수정 · ENDED 회원 제한, 회원 이름 · 메모 수정, 중도 종료 규칙(Q13). Fit-link-PRD 레포 작업이다. 시작한 수업은 휴강 불가(2026-11-11), ENDED 회원의 링크 재발급 허용(2026-11-17)으로 정했다. DEC-0012 초안 작성, 기획 레포 PR 전 |
