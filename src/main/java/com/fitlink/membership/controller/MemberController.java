@@ -3,6 +3,7 @@ package com.fitlink.membership.controller;
 import com.fitlink.membership.dto.MemberAddRequest;
 import com.fitlink.membership.dto.MemberAddedResponse;
 import com.fitlink.membership.dto.MemberDetailResponse;
+import com.fitlink.membership.dto.MemberListResponse;
 import com.fitlink.membership.model.AddedMember;
 import com.fitlink.membership.service.MemberService;
 import jakarta.validation.Valid;
@@ -10,6 +11,8 @@ import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -34,6 +37,17 @@ class MemberController {
 		return ResponseEntity.status(HttpStatus.CREATED)
 			.cacheControl(CacheControl.noStore())
 			.body(new MemberAddedResponse(MemberDetailResponse.of(added.member()), added.link().url()));
+	}
+
+
+	@GetMapping
+	MemberListResponse list(@AuthenticationPrincipal Long instructorId) {
+		return MemberListResponse.of(members.list(instructorId));
+	}
+
+	@GetMapping("/{id}")
+	MemberDetailResponse get(@AuthenticationPrincipal Long instructorId, @PathVariable long id) {
+		return MemberDetailResponse.of(members.get(instructorId, id));
 	}
 
 }

@@ -8,7 +8,7 @@
 |---|---|---|---|
 | 1 | PRD-0001 US 1 가입 · 로그인 · 세션 | AC-1 ~ AC-10 | 완료 |
 | 2 | US 2 시간표 · 오픈 범위, 매일 자정 작업 | AC-11 ~ AC-22 | 완료 |
-| 3 | US 3 회원 · US 4 링크 · US 5 개봉 상태 | AC-23 ~ AC-28 | 진행 중 (3.3 완료) |
+| 3 | US 3 회원 · US 4 링크 · US 5 개봉 상태 | AC-23 ~ AC-28 | 진행 중 (3.4 완료) |
 | 4 | US 3 수강권 · 회원 카드 · 월 정액 주기 | 추가 예정 | Phase 3 뒤 작성 |
 
 ### Phase 1 구조
@@ -407,11 +407,11 @@ flowchart LR
 
 ### 3.4 회원 목록 · 상세
 
-- [ ] RED: `[BE-0001 AC-25] 미개봉 ACTIVE 나 · 가, 개봉 ACTIVE 다, 미개봉 ENDED 라, 개봉 ENDED 마 → unopenedCount 2, 순서 가 나 다 라 마, 다른 강사 회원 없음`
-- [ ] RED: `[BE-0001 AC-25] 같은 이름 두 명은 id 순`, `연 링크를 재발급하면 linkOpened false이고 unopenedCount에 들어간다`
-- [ ] RED: `[BE-0001 AC-26] 상세 → MemberDetail, 다른 강사 · 없는 id → 같은 404, id가 숫자가 아니면 400`
-- [ ] GREEN: 목록은 쿼리 하나(`member` LEFT JOIN 살아 있는 `member_link`)로 `linkOpened`와 정렬을 SQL에서 한다. `unopenedCount`는 같은 결과에서 센다. 이름순은 DB 정렬 규칙(collation)을 따르는데, 테스트 DB와 운영 DB의 정렬 규칙이 다르면 순서가 달라질 수 있으므로 `COLLATE "C"`(유니코드 코드 순. 한글 음절은 가나다 순)를 명시할지 이때 정한다
-- [ ] REFACTOR: 목록 · 상세 응답 record 정리
+- [x] RED: `[BE-0001 AC-25] 미개봉 ACTIVE 나 · 가, 개봉 ACTIVE 다, 미개봉 ENDED 라, 개봉 ENDED 마 → unopenedCount 2, 순서 가 나 다 라 마, 다른 강사 회원 없음`
+- [x] RED: `[BE-0001 AC-25] 같은 이름 두 명은 id 순`, `연 링크를 재발급하면 linkOpened false이고 unopenedCount에 들어간다`
+- [x] RED: `[BE-0001 AC-26] 상세 → MemberDetail, 다른 강사 · 없는 id → 같은 404, id가 숫자가 아니면 400`
+- [x] GREEN: 목록은 쿼리 하나(`member` LEFT JOIN 살아 있는 `member_link`)로 `linkOpened`와 정렬을 SQL에서 한다. `unopenedCount`는 같은 결과에서 센다. 이름순은 DB 정렬 규칙(collation)을 따르는데, 테스트 DB와 운영 DB의 정렬 규칙이 다르면 순서가 달라질 수 있으므로 `COLLATE "C"`(유니코드 코드 순. 한글 음절은 가나다 순)를 명시할지 이때 정한다 — 명시했다. 테스트 DB(`postgres:17` 기본 en_US.utf8)에서는 `a, B` 순이라 C와 다르다(`B, a`). 대소문자가 섞인 이름으로 고정했다. 정렬 앞 묶음은 `CASE`, `unopenedCount`는 응답 record가 목록에서 센다. 변이: 살아 있는 링크 조건 · ENDED 묶음 · 두 소유자 조건 · 이름 정렬 · C 정렬 · 미개봉 수의 ACTIVE 조건을 모두 테스트가 잡음(살아 있는 링크 조건은 처음에 살아남아, 재발급 테스트가 목록 길이까지 보게 고침). 같은 이름의 `id` 순은 변이가 살아남는다. 행이 적으면 DB가 넣은 순서대로 돌려줘 테스트로 강제할 수 없다(먼저 넣은 회원 · 링크 행을 UPDATE해 저장 위치를 뒤로 보내도 살아남았다). 리뷰 반영: 목록 · 상세를 `readOnly` 트랜잭션으로(시간표 모듈과 같게), 상세도 재발급 뒤 미개봉인지 확인
+- [x] REFACTOR: 목록 · 상세 응답 record 정리 — 지금은 같은 모양이지만 수강권 단계에서 목록은 `frontCard`, 상세는 `cards`로 갈라지므로 나눠 둔다
 
 ### 3.5 수정 · 수강 종료 · 다시 활성화 `PATCH /instructor/members/{id}`
 
