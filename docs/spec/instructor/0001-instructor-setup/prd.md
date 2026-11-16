@@ -145,7 +145,7 @@ sequenceDiagram
 
 ### AC-11. 반복 규칙은 요일마다 하나씩 등록된다
 
-근거: PRD-0001 AC 2.1.5, Q2
+근거: PRD-0001 AC 2.1.5 · 2.1.8, Q2
 
 - [ ] `POST /instructor/recurrences` `{ weekdays, startTime, capacity }`는 선택한 요일마다 규칙 1개를 한 트랜잭션에서 만들고 201 `{ items: [Recurrence] }`를 준다
 - [ ] `weekdays`가 비었거나 중복, `startTime`이 `HH:mm`이 아님, `capacity`가 1 ~ 50 밖이면 400 VALIDATION_FAILED이고 아무것도 저장하지 않는다
@@ -162,14 +162,14 @@ sequenceDiagram
 
 ### AC-13. 규칙을 끄면 이후 생성만 멈추고, 다시 켜면 이어서 만든다
 
-근거: PRD-0001 AC 2.1.4, Q18
+근거: PRD-0001 AC 2.1.4 · 2.1.6, Q18
 
 - [ ] `PATCH /instructor/recurrences/{id}` `{ active: false }`는 이미 만든 회차를 그대로 두고, 이후 생성은 그 규칙의 회차를 만들지 않는다
 - [ ] `{ active: true }`로 다시 켜면 같은 트랜잭션에서 오픈 범위 안의 회차를 만든다. 같은 요일 · 시각의 켜진 규칙이 있으면 409 RECURRENCE_DUPLICATE
 
 ### AC-14. 꺼진 규칙의 남은 회차는 같은 요일 · 시각의 규칙이 이어받는다
 
-근거: Q18
+근거: PRD-0001 AC 2.1.7, Q18
 
 - [ ] 규칙을 만들거나 다시 켤 때, 같은 강사 · 요일 · 시각의 꺼진 규칙이 가진 오늘 이후 회차는 그 규칙의 회차가 된다. 시각 변경 · 휴강 · 정원은 그대로다
 - [ ] 이어받은 날에는 회차가 새로 생기지 않는다. 시각을 옮겨 둔 회차 옆에 원래 시각 회차가 다시 생기지 않는다
@@ -177,7 +177,7 @@ sequenceDiagram
 
 ### AC-15. 같은 강사의 같은 시각에 휴강 아닌 수업은 하나다
 
-근거: Q18, Q33
+근거: PRD-0001 AC 2.6.1 · 2.6.2, Q18, Q33
 
 - [ ] 일회성 수업 등록 · 슬롯 시각 변경이 휴강 아닌 수업과 같은 시각이면 409 SLOT_TIME_TAKEN이고 바뀌지 않는다. 휴강한 수업의 시각에는 열 수 있다
 - [ ] 회차 생성은 그 강사에게 같은 시각의 슬롯이 있으면 휴강이어도 건너뛴다. 휴강한 일회성 수업 자리에 나중에 만든 규칙의 회차가 생기지 않는다(PRD-0001 AC 2.3.4)
@@ -199,14 +199,14 @@ sequenceDiagram
 
 ### AC-18. 반복 회차는 그 회차의 시각만 바꾼다
 
-근거: PRD-0001 AC 2.3.2 · 2.3.3, Q21
+근거: PRD-0001 AC 2.3.3 · 2.3.5 · 2.3.6, Q21
 
 - [ ] `PATCH /instructor/slots/{id}` `{ startTime }`은 그 슬롯의 시각만 같은 날 안에서 바꾼다. 규칙과 다른 주 회차는 그대로다
 - [ ] 판정 순서: 404 → 휴강이면 422 SLOT_CANCELED → 시작했으면 422 CLASS_STARTED → 반복 회차에 다른 날짜(`date`)를 보냈거나 새 시각이 지금 이전이면 400 → 예약이 있으면(`taken > 0`) 422 SLOT_HAS_BOOKINGS → 같은 시각 수업이 있으면 409 SLOT_TIME_TAKEN
 
 ### AC-19. 휴강은 슬롯을 남기고 되돌릴 수 없다
 
-근거: PRD-0001 AC 2.3.4, Q21
+근거: PRD-0001 AC 2.3.4 · 2.3.6, Q21
 
 - [ ] `POST /instructor/slots/{id}/cancel`은 `canceled_at`을 채우고 200 `SlotDetail`을 준다. 행은 지우지 않는다
 - [ ] 이미 휴강이면 200이고 `canceled_at`이 바뀌지 않는다. 시작한 수업이면 422 CLASS_STARTED
@@ -214,7 +214,7 @@ sequenceDiagram
 
 ### AC-20. 일회성 수업은 지금 이후 · 오픈 범위 안에 열고 날짜까지 옮길 수 있다
 
-근거: Q33
+근거: PRD-0001 AC 2.5.1 ~ 2.5.4, Q33
 
 - [ ] `POST /instructor/slots` `{ date, startTime, capacity }`는 `recurrence_id`가 없는 슬롯을 만들고 201 `SlotDetail`을 준다. 회차 생성은 돌지 않는다
 - [ ] 시작 시각이 지금 이전이거나 날짜가 오픈 범위 밖이거나 `capacity`가 1 ~ 50 밖이면 400이고 `fields`에 해당 필드를 준다
@@ -493,7 +493,7 @@ CREATE INDEX class_slot_owner_idx ON class_slot (instructor_id, starts_at);
 - 시작 시각이 지금 이후이고, 날짜가 오픈 범위 `[오늘, 오늘 + N일)` 안이어야 만든다. 아니면 400
 - 같은 시각에 휴강 아닌 수업이 이미 있으면 409 SLOT_TIME_TAKEN(`class_slot_time_uidx`)
 - 휴강은 반복 회차와 같다(되돌릴 수 없음, 시작한 수업은 거부)
-- 수정은 반복 회차와 달리 **날짜도 바꿀 수 있다.** 반복 회차는 규칙의 요일을 따라야 하므로 시각만 바꾼다(PRD-0001 AC 2.3.2). 일회성 수업은 따를 규칙이 없다. 날짜를 바꾸면 `occurs_on`도 같이 바꾸고, 새 날짜가 오픈 범위 안이어야 한다. 시각만 바꿀 때는 반복 회차와 같이 범위를 보지 않는다(범위를 줄여 범위 밖에 남은 수업도 시각은 고칠 수 있다). 지금 이후 · 같은 시각 없음 · 예약 없음(SLOT_HAS_BOOKINGS)은 반복 회차와 같다
+- 수정은 반복 회차와 달리 **날짜도 바꿀 수 있다.** 반복 회차는 규칙의 요일을 따라야 하므로 시각만 바꾼다(PRD-0001 AC 2.3.5). 일회성 수업은 따를 규칙이 없다. 날짜를 바꾸면 `occurs_on`도 같이 바꾸고, 새 날짜가 오픈 범위 안이어야 한다. 시각만 바꿀 때는 반복 회차와 같이 범위를 보지 않는다(범위를 줄여 범위 밖에 남은 수업도 시각은 고칠 수 있다). 지금 이후 · 같은 시각 없음 · 예약 없음(SLOT_HAS_BOOKINGS)은 반복 회차와 같다
 - 오픈 범위를 줄여 범위 밖에 남은 일회성 수업은 반복 회차와 같이 지우지 않는다(AC 2.4.2)
 
 **소유자는 `class_slot.instructor_id`로 직접 본다.** 일회성 수업은 `recurrence`가 없으므로 `recurrence`를 타고 소유자를 찾을 수 없다. 강사 · 회원 화면의 슬롯 쿼리는 `recurrence`를 조인하지 않고 `class_slot.instructor_id`로 거른다. `recurrence`를 inner join하면 일회성 수업이 결과에서 빠진다.
@@ -504,7 +504,7 @@ CREATE INDEX class_slot_owner_idx ON class_slot (instructor_id, starts_at);
 
 `class_slot_taken_range`는 예약 트랜잭션의 조건부 UPDATE가 뚫렸을 때를 막는 마지막 방어선이다. 애플리케이션 버그로 정원을 넘기는 UPDATE가 들어오면 DB가 거부한다.
 
-**슬롯 생성의 중복 방지 키는 `(recurrence_id, occurs_on)`이다.** `starts_at`으로 걸면 강사가 개별 슬롯의 시각을 바꾼 뒤(PRD 1 AC 2.3.2) 다음 배치가 "원래 시각 슬롯이 없다"고 보고 다시 만든다. 그러면 AC 2.3.3(변경은 그 슬롯에만)과 AC 2.2.2(여러 번 돌려도 결과 같음)가 깨진다. 원래 날짜를 따로 저장하고 그것으로 중복을 막으면 시각을 바꿔도 배치가 같은 회차를 다시 만들지 않는다. 휴강은 행을 지우지 않으므로(`canceled_at`) 역시 다시 만들어지지 않는다. 일회성 수업은 `recurrence_id`가 NULL이라 이 유니크의 대상이 아니다(UNIQUE는 NULL끼리를 같은 값으로 보지 않는다). 배치가 만드는 행이 아니므로 중복 생성 문제도 없다.
+**슬롯 생성의 중복 방지 키는 `(recurrence_id, occurs_on)`이다.** `starts_at`으로 걸면 강사가 개별 슬롯의 시각을 바꾼 뒤(PRD 1 AC 2.3.5) 다음 배치가 "원래 시각 슬롯이 없다"고 보고 다시 만든다. 그러면 AC 2.3.3(변경은 그 슬롯에만)과 AC 2.2.2(여러 번 돌려도 결과 같음)가 깨진다. 원래 날짜를 따로 저장하고 그것으로 중복을 막으면 시각을 바꿔도 배치가 같은 회차를 다시 만들지 않는다. 휴강은 행을 지우지 않으므로(`canceled_at`) 역시 다시 만들어지지 않는다. 일회성 수업은 `recurrence_id`가 NULL이라 이 유니크의 대상이 아니다(UNIQUE는 NULL끼리를 같은 값으로 보지 않는다). 배치가 만드는 행이 아니므로 중복 생성 문제도 없다.
 
 **꺼진 규칙의 남은 회차는 같은 요일 · 시각의 새 규칙이 이어받는다.** 규칙 A(화 20:00)를 끄면 이미 만든 회차는 남는다(AC 2.1.4). 이어서 같은 요일 · 시각으로 규칙 B를 만들면, B의 배치는 `(B, 날짜)`를 찾으므로 A의 회차를 자기 것으로 알아보지 못한다. 그러면 A의 회차를 강사가 19:30으로 옮겨 둔 날에 B가 20:00 회차를 또 만든다. 그래서 규칙을 만들거나 다시 켤 때, 같은 강사 · 요일 · 시각의 꺼진 규칙이 가진 오늘 이후 회차의 `recurrence_id`를 새 규칙으로 바꾼다. 시각 · 휴강 · 정원 · 예약은 그대로다. 이후 배치는 `(B, 날짜)`가 이미 있어 그 날을 건너뛴다.
 
@@ -735,7 +735,7 @@ ALTER TABLE entitlement ADD CONSTRAINT entitlement_kind_no_overlap
 | 1 · AC 2.2.1 | 매일 1회 오픈 범위 끝까지 채움 | 같은 쿼리를 매일 자정 · 앱 시작 때 전체 강사로 실행 |
 | 1 · AC 2.2.2 | 배치를 여러 번 돌려도 결과 동일 | 위 유니크 + INSERT ... ON CONFLICT DO NOTHING |
 | 1 · AC 2.3.1 | 휴강. 예약이 있으면 확인 창 | `class_slot.canceled_at` + `booking.cancel_reason` (처리는 write-paths 5.2) |
-| 1 · AC 2.3.2 | 예약이 있는 슬롯은 시각 변경 불가 | 조건부 UPDATE `WHERE taken = 0` ([쓰기 경로](../../booking/write-paths.md)) |
+| 1 · AC 2.3.5 | 예약이 있는 슬롯은 시각 변경 불가 | 조건부 UPDATE `WHERE taken = 0` ([쓰기 경로](../../booking/write-paths.md)) |
 | 1 · AC 2.3.3 | 삭제 · 변경은 해당 슬롯에만 | `recurrence`와 `class_slot`을 분리. 규칙은 안 건드린다 |
 | (일회성 수업, PRD-0001 AC 추가 예정 Q38) | 반복 규칙 없이 한 번만 여는 수업. 지금 이후 · 오픈 범위 안 · 같은 시각 없음 | `class_slot.recurrence_id` NULL 허용 + `class_slot_time_uidx`. 시각 · 범위 검사는 애플리케이션. 규칙이 만든 슬롯의 소유자 일치는 복합 FK `class_slot_recurrence_owner_fk` |
 | 1 · AC 2.4.1 | 오픈 범위 7~28일 | `setting` CHECK open_range_days BETWEEN 7 AND 28 |
@@ -822,7 +822,7 @@ ALTER TABLE entitlement ADD CONSTRAINT entitlement_kind_no_overlap
 - 규칙 끄기는 이후 생성만 멈춘다(AC 2.1.4). 다시 켤 때 같은 요일 · 시각의 켜진 규칙이 있으면 409. 같은 요일 · 시각의 꺼진 규칙이 있는데 새 규칙을 만들거나 다시 켜면, 꺼진 규칙의 오늘 이후 회차를 이어받고 슬롯을 만든다(3.1 시간표 절)
 - 슬롯 목록: 시작 시각이 지금 이후인 슬롯 전부. 휴강한 슬롯도 넣고 `canceledAt`으로 구분한다. 오픈 범위를 줄여 범위 밖에 남은 슬롯도 넣는다. 예약이 걸려 있을 수 있어 강사 눈에서 사라지면 안 된다. 범위 밖인지는 FE가 `openRangeDays`로 가른다. 회원 화면(PRD-0002)은 범위 안 · 휴강 아닌 것만 보여준다
 - 일회성 수업 등록: `capacity` 1 ~ 50, `date` · `startTime` 형식 검사 뒤 400(시작 시각이 지금 이전이면 `startTime`, 날짜가 오픈 범위 밖이면 `date`) → 409 SLOT_TIME_TAKEN 순서. 같은 시각 검사는 INSERT의 유니크 위반으로 한다. 슬롯 생성 쿼리는 돌지 않는다
-- 시각 변경: 그 슬롯만(AC 2.3.2 · 2.3.3). 반복 회차는 날짜를 바꿀 수 없어 지금과 다른 `date`를 보내면 400이고(같은 날짜는 받는다), 일회성 수업은 `date`를 바꿀 수 있다(오픈 범위 안). 시작한 슬롯은 시각 변경 · 휴강을 거부한다(Q21). 슬롯을 먼저 읽고 404 → SLOT_CANCELED → CLASS_STARTED → 400(반복 회차의 다른 `date`, 새 날짜가 범위 밖, 새 시각이 지금 이전 순. `fields`로 어느 필드인지 준다) → SLOT_HAS_BOOKINGS → SLOT_TIME_TAKEN 순서로 판정한다. 쓰기는 조건부 UPDATE([예약 쓰기 경로](../../booking/write-paths.md))이고, 읽은 뒤 끼어들어 0행이 되면 다시 읽어 같은 순서로 답한다. 같은 시각 검사는 UPDATE의 유니크 위반으로 한다
+- 시각 변경: 그 슬롯만(AC 2.3.3 · 2.3.5). 반복 회차는 날짜를 바꿀 수 없어 지금과 다른 `date`를 보내면 400이고(같은 날짜는 받는다), 일회성 수업은 `date`를 바꿀 수 있다(오픈 범위 안). 시작한 슬롯은 시각 변경 · 휴강을 거부한다(Q21). 슬롯을 먼저 읽고 404 → SLOT_CANCELED → CLASS_STARTED → 400(반복 회차의 다른 `date`, 새 날짜가 범위 밖, 새 시각이 지금 이전 순. `fields`로 어느 필드인지 준다) → SLOT_HAS_BOOKINGS → SLOT_TIME_TAKEN 순서로 판정한다. 쓰기는 조건부 UPDATE([예약 쓰기 경로](../../booking/write-paths.md))이고, 읽은 뒤 끼어들어 0행이 되면 다시 읽어 같은 순서로 답한다. 같은 시각 검사는 UPDATE의 유니크 위반으로 한다
 - 휴강: 404 → 이미 휴강이면 200(변경 없음, PRD-0003 AC 7.2.4) → CLASS_STARTED. 예약 취소 · 복구와 회원 이름(PRD-0003 AC 7.1.3 · 7.3.4)은 PRD 3에서 붙는다
 - 예약자 명단 · 대기 수는 PRD 3 · 4에서 필드를 더한다
 
@@ -843,7 +843,7 @@ ALTER TABLE entitlement ADD CONSTRAINT entitlement_kind_no_overlap
 | POST | `/instructor/members` | `{ "name": "김OO", "memo": "목요반" }` | 201 `{ "member": MemberDetail, "linkUrl": "https://app.{도메인}/m/{token}" }` | 400 |
 | GET | `/instructor/members/{id}` | | 200 `MemberDetail` | 404 |
 | PATCH | `/instructor/members/{id}` | `{ "name": "김OO", "memo": "화요반", "status": "ENDED" }` 중 바꿀 필드만 | 200 `MemberDetail` | 400, 404 |
-| POST | `/instructor/members/{id}/link` | | 201 `{ "linkUrl": "..." }` | 404, 422 MEMBER_ENDED |
+| POST | `/instructor/members/{id}/link` | | 201 `{ "linkUrl": "..." }` | 404 |
 
 ```jsonc
 // MemberSummary
@@ -858,7 +858,7 @@ ALTER TABLE entitlement ADD CONSTRAINT entitlement_kind_no_overlap
 - `linkUrl`은 발급 응답에만 있다(AC 4.1.2). 응답에 `Cache-Control: no-store`, 본문은 로그에 남기지 않는다(AC 4.4.1). 문구 조립과 복사는 FE(AC 4.2.2)
 - 회원 목록: `unopenedCount`는 링크를 열지 않은 ACTIVE 회원 수(AC 5.1.1). `linkOpened`는 살아 있는 링크의 `first_opened_at` 유무(AC 5.1.3 · 5.1.5). 줄의 남은 횟수는 `frontCard`의 큰 글씨다(DEC-0010). 정렬은 미개봉 ACTIVE → 나머지 ACTIVE → ENDED, 묶음 안은 이름순. ENDED는 미개봉이어도 마지막 묶음이다(AC 5.1.1이 미개봉 수에서 ENDED를 빼는 것과 맞춘다)
 - 회원 수정: 보낸 필드만 바꾼다. 빠진 필드는 그대로, `memo: null` · `""`은 메모 삭제, `name: null`은 400. 검사는 회원 추가와 같다. 수강 종료 · 다시 활성화는 `status`(AC 3.3.1 · 3.3.3)
-- 재발급: 기존 링크 무효 + 새 링크(AC 4.3.1 · 4.3.2). 회원 행을 먼저 잠근다(`FOR NO KEY UPDATE`). 확인 창 여부는 FE가 `linkOpened`로 판단한다. 두 번 갔으면 마지막 응답의 `linkUrl`만 쓴다. ENDED 회원은 422 MEMBER_ENDED이고 다시 활성화한 뒤 재발급한다. 잠근 뒤 `status`를 보므로 종료와 재발급이 겹쳐도 한 줄로 선다
+- 재발급: 기존 링크 무효 + 새 링크(AC 4.3.1 · 4.3.2). 회원 행을 먼저 잠근다(`FOR NO KEY UPDATE`). 확인 창 여부는 FE가 `linkOpened`로 판단한다. 두 번 갔으면 마지막 응답의 `linkUrl`만 쓴다. ENDED 회원도 재발급한다. 유출된 링크를 끊는 수단이라 ACTIVE로 되돌리지 않고 바로 할 수 있어야 한다(되돌리면 그 사이 유출된 링크로 예약할 수 있다). 새 링크도 ENDED인 동안에는 예약할 수 없다
 
 #### 5. 수강권 (I-10, I-11)
 
@@ -909,7 +909,7 @@ ALTER TABLE entitlement ADD CONSTRAINT entitlement_kind_no_overlap
 | 409 | RECURRENCE_DUPLICATE | 규칙 등록 · 다시 켜기 | `weekdays` |
 | 409 | SLOT_TIME_TAKEN | 일회성 수업 등록 · 슬롯 시각 변경 | |
 | 422 | SLOT_CANCELED · SLOT_HAS_BOOKINGS | 슬롯 시각 변경 | |
-| 422 | MEMBER_ENDED | 수강권 등록 · 링크 재발급 | |
+| 422 | MEMBER_ENDED | 수강권 등록 | |
 | 422 | ENTITLEMENT_EXPIRED | 잔여 수정(횟수권) | |
 | 422 | CLASS_STARTED | 슬롯 시각 변경 · 휴강. PRD-0003 AC 3.1과 같은 코드 | |
 | 422 | ENTITLEMENT_PERIOD_OVERLAP | 수강권 등록 | |
@@ -1020,14 +1020,14 @@ Phase 단위로 나눠 만든다. 번호는 Flyway 파일 이름 `V{번호}__{�
 | ~~Q18~~ | ~~규칙을 끄고 같은 요일 · 시각으로 새 규칙을 만들면~~ | **해소.** 허용한다. 새 규칙(또는 다시 켠 규칙)이 꺼진 규칙의 오늘 이후 회차를 이어받고(정원은 원래 값), 같은 강사 · 같은 시각에 휴강 아닌 수업은 하나만 둔다(`class_slot_time_uidx`). 3.1 시간표 절 |
 | ~~Q19~~ | ~~오픈 범위를 늘릴 때 월 정액 주기도 즉시 만들 것인가~~ | **해소.** 만든다. `entitlement`도 `InstructorOpenRangeExtendedEvent`를 받아 같은 트랜잭션에서 그 강사의 주기를 만든다(3.1 시간표 절의 모듈 방향) |
 | ~~Q20~~ | ~~AC 대 제약 표가 아직 모든 AC를 덮지 않는다~~ | **해소.** 1.2.1, 1.3.2, 2.1.4, 3.2.5, 3.2.13(3.2.7 대체), 3.3.3, 5.1.1을 채웠다. 남은 AC는 Phase마다 AC를 쓸 때 더한다 |
-| Q21 | 시작한 슬롯의 시각 변경 · 휴강 거부(API 2절)와 지난 시각으로 옮기기 거부(400)는 PRD에 AC가 없다 | 후속. PRD-0001 AC 2.3 · PRD-0003 AC 7에 AC 추가 |
+| ~~Q21~~ | ~~시작한 슬롯의 시각 변경 · 휴강 거부(API 2절)와 지난 시각으로 옮기기 거부(400)는 PRD에 AC가 없다~~ | **해소.** PRD-0001 AC 2.3.6 · PRD-0003 AC 7.2.6으로 올렸다([DEC-0012](https://github.com/Fit-link-v2/Fit-link-PRD/blob/main/decisions/0012-one-off-class-and-schedule-member-rules.md)) |
 | ~~Q22~~ | ~~회원 목록 정렬(미개봉 → ACTIVE → ENDED)의 근거 AC가 없다~~ | **해소.** 이 순서로 확정하고 Phase AC로 고정한다. ENDED는 미개봉이어도 마지막 묶음이다(3.2 API 4절) |
 | ~~Q23~~ | ~~월 정액 등록 요청 모양~~ | **해소.** 횟수권과 같은 경로에 `kind: "SUBSCRIPTION"`, `limit { per, count }`, `startsOn`, `weeks`(AC 3.2.12의 등록 기간). 종료일 · 주기 수는 서버가 계산한다(3.2 API 5절) |
 | ~~Q24~~ | ~~만료되지 않은 다른 종류가 있을 때 등록 전 안내(AC 3.2.16)에 쓸 값~~ | **해소.** FE 몫. 회원 상세 카드의 `kind` · `endsOn` · `state`로 계산한다. 서버는 거부할 때 `availableFrom`을 준다 |
 | ~~Q25~~ | ~~휴강한 슬롯을 강사 슬롯 목록에 넣나~~ | **해소.** 넣고 `canceledAt`으로 구분한다 |
 | ~~Q26~~ | ~~오픈 범위를 줄인 뒤 범위 밖에 남은 슬롯(AC 2.4.2)을 강사에게 보이나~~ | **해소.** 보인다. 강사 목록은 지금 이후 슬롯 전부다. 회원 화면만 범위 안으로 자른다 |
 | ~~Q27~~ | ~~만료되거나 시작 전인 횟수권의 잔여를 고칠 수 있나~~ | **해소.** 종료일이 지난 횟수권은 거부(422 ENTITLEMENT_EXPIRED), 시작 전은 허용 |
-| ~~Q28~~ | ~~ENDED 회원에게 수강권 등록 · 링크 재발급을 허용하나~~ | **해소.** 둘 다 422 MEMBER_ENDED. 다시 활성화한 뒤 한다 |
+| ~~Q28~~ | ~~ENDED 회원에게 수강권 등록 · 링크 재발급을 허용하나~~ | **해소.** 수강권 등록은 422 MEMBER_ENDED, 다시 활성화한 뒤 한다. 링크 재발급은 허용한다(2026-11-17 변경, 유출 대응. DEC-0012) |
 | ~~Q29~~ | ~~회원 상세에서 이름 · 메모를 고치나~~ | **해소.** 고친다. `PATCH /instructor/members/{id}`가 `name` · `memo` · `status` 중 보낸 필드만 바꾼다 |
 | Q30 | 로그인 성공 · 실패 뒤 이동할 `app.` 경로와 실패를 알리는 방법(예: `?login=failed`) | 콜백 302 목적지. DEC-0008 후속. FE와 정하기 전까지 임시값을 쓴다: 성공 `https://app.{도메인}/`, 실패 `https://app.{도메인}/?login=failed`. 설정값이라 바뀌어도 코드는 그대로다(BE-ADR-0014). 보류: 도메인을 사기 전이라 localhost 값으로 개발한다 |
 | ~~Q31~~ | ~~입력 상한: 이름 · 메모 길이, 횟수권 `maxCount`, 지난 날짜 횟수권 등록~~ | **해소.** 이름 1 ~ 50자, 메모 500자, `maxCount` 1 ~ 999, 월 정액 횟수 1 ~ 99 · 4 ~ 48주. 종료일이 오늘 이전인 수강권은 400, 시작일이 지난 것은 허용. DB CHECK도 건다 |
@@ -1037,4 +1037,4 @@ Phase 단위로 나눠 만든다. 번호는 Flyway 파일 이름 `V{번호}__{�
 | Q35 | 기존 강사가 다시 로그인할 때 카카오 닉네임 · 이메일이 바뀌었으면 갱신하나 | Phase 1은 갱신하지 않는다. 화면에 강사 이름을 쓰는 곳이 생기면 정한다 |
 | ~~Q36~~ | ~~만료 · 로그아웃된 세션 행을 언제 지우나~~ | **해소.** 매일 자정에 만료된 행을 지운다. 로그아웃한 행도 만료가 지나면 지워진다(BE-ADR-0003의 "만료 뒤 지운다"와 같음, 3.1 로그인 세션 절) |
 | Q37 | 이메일 동의를 요청하나 | PRD-0001 AC 1.2.4는 필수 동의로 요청하되 비즈 앱 전환이 막히면 폐기한다. 카카오 앱 콘솔 확인 전이라 Phase 1은 동의 항목 없이 시작하고 `email`은 `null`이다(Q14) |
-| Q38 | 이 문서에서 정한 제품 규칙을 PRD-0001에 AC로 올리기 | 일회성 수업(AC 2.3.2는 아직 "범위에 없다"), 같은 시각 수업 하나, 규칙 이어받기, 잔여 수정 · ENDED 회원 제한, 회원 이름 · 메모 수정, 중도 종료 규칙(Q13). Fit-link-PRD 레포 작업이다 |
+| ~~Q38~~ | ~~이 문서에서 정한 제품 규칙을 PRD-0001에 AC로 올리기~~ | **해소.** [DEC-0012](https://github.com/Fit-link-v2/Fit-link-PRD/blob/main/decisions/0012-one-off-class-and-schedule-member-rules.md)와 PRD-0001 AC 2.1.6 ~ 2.1.8 · 2.3.5 · 2.3.6 · 2.5 · 2.6 · 3.1.4 · 3.2.21 · 3.3.4 · 5.1.7, PRD-0003 AC 5.2.4 · 7.2.6(2026-11-17). AC 2.3.2는 폐기되고 2.3.5로 대체 |
