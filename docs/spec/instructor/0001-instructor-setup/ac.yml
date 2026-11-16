@@ -1,6 +1,7 @@
 # AC 계약. 테스트가 무엇을 증명해야 하는지의 원본.
 # id는 한 번 정하면 바꾸지 않는다. 삭제할 AC는 지우지 말고 status: removed
-# Phase 1(US 1 가입 · 로그인 · 세션)은 AC-1 ~ AC-10, Phase 2(US 2 시간표 · 오픈 범위 · 자정 작업)는 AC-11 ~ AC-22다.
+# Phase 1(US 1 가입 · 로그인 · 세션)은 AC-1 ~ AC-10, Phase 2(US 2 시간표 · 오픈 범위 · 자정 작업)는 AC-11 ~ AC-22,
+# Phase 3(US 3 회원 · US 4 링크 · US 5 개봉 상태)은 AC-23 ~ AC-28이다.
 # 다음 Phase는 번호를 이어 붙인다(prd.md 1절 진행 단위). 시간표 AC(AC-11 ~ AC-21)의 "지금" · "오늘"은 테스트에서 고정한 Clock 값이다.
 # 세션 만료(AC-7 · AC-22)는 DB의 now()를 쓰므로 expires_at도 DB 시각 기준으로 만든다.
 spec: docs/spec/instructor/0001-instructor-setup/prd.md
@@ -234,6 +235,69 @@ criteria:
     type: behavior
     layers: [schema, test]
     assertion: "expires_at이 지난 행 · 로그아웃했지만 만료 전인 행 · 유효한 행이 있을 때 정리 작업을 돌리면 첫 번째만 지워진다. 지운 세션의 쿠키로 GET /me → 401. 작업은 cron 0 0 0 * * *, zone Asia/Seoul이다"
+    priority: must
+    verify: machine
+    status: active
+
+  - id: AC-23
+    source: [PRD-0001 AC 3.1.1, PRD-0001 AC 3.1.2, PRD-0001 AC 3.1.3, Q31]
+    description: "회원은 이름만으로 추가되고 그 자리에서 링크가 발급된다"
+    type: behavior
+    layers: [schema, api, test]
+    assertion: "POST /instructor/members { name: '  김OO  ', memo: '목요반' } → 201 { member: { id, name: '김OO', memo: '목요반', status: ACTIVE, linkOpened: false }, linkUrl }. member 1행 · revoked_at이 빈 member_link 1행. memo ''는 null로 저장. name 빈 · 공백만 · 51자, memo 501자 → 400 VALIDATION_FAILED(fields), member · member_link 행 없음. 같은 이름으로 다시 추가하면 201이고 회원이 2명이다. 로그인하지 않으면 401, X-CSRF 헤더가 없으면 403. 링크 INSERT가 실패하면 회원 행도 남지 않는다(같은 트랜잭션)"
+    priority: must
+    verify: machine
+    status: active
+
+  - id: AC-24
+    source: [PRD-0001 AC 4.1.1, PRD-0001 AC 4.1.2, PRD-0001 AC 4.1.3, PRD-0001 AC 4.4.1, Q32]
+    description: "링크 토큰은 22자 난수이고 서버에는 해시만 남는다"
+    type: security
+    layers: [schema, api, test]
+    assertion: "linkUrl은 설정한 회원 화면 주소 + /m/ + token이고 token은 [A-Za-z0-9_-]{22}다(16바이트, 패딩 없음). member_link.token_hash = SHA-256(token)이고 32바이트다. member_link에 토큰 원본 컬럼이 없다. 회원 추가 · 재발급 응답의 Cache-Control은 정확히 no-store다(Security 기본값 no-cache, no-store, max-age=0, must-revalidate가 아니다). 로그를 TRACE로 낮추고 추가 · 재발급을 한 뒤 출력 전체에 token이 없다. 두 번 발급한 token이 다르다"
+    priority: must
+    verify: machine
+    status: active
+    failure_modes:
+      - symptom: "로그 수준을 DEBUG로 낮추면 응답 본문의 linkUrl이 로그에 찍힌다"
+        cause: "Spring MVC가 응답을 쓸 때 본문 객체의 toString을 DEBUG에서는 100자까지, TRACE에서는 전체를 남긴다. 재발급 응답은 짧아 DEBUG에서도 토큰이 찍힌다"
+
+  - id: AC-25
+    source: [PRD-0001 AC 1.3.1, PRD-0001 AC 5.1.1, PRD-0001 AC 5.1.3, PRD-0001 AC 5.1.5, PRD-0001 AC 5.1.7, Q22]
+    description: "회원 목록은 미개봉 ACTIVE → 나머지 ACTIVE → ENDED 순이고 미개봉 수에서 ENDED를 뺀다"
+    type: behavior
+    layers: [api, test]
+    assertion: "회원 5명(미개봉 ACTIVE 나 · 가, 개봉 ACTIVE 다, 미개봉 ENDED 라, 개봉 ENDED 마)과 다른 강사의 회원 1명이 있을 때 GET /instructor/members → 200 { unopenedCount: 2, items: [가, 나, 다, 라, 마] }. 다른 강사의 회원은 없다. 같은 이름 두 명은 id 순. 링크를 연 뒤(first_opened_at) 재발급하면 linkOpened false이고 unopenedCount에 다시 들어간다. 이전 링크의 first_opened_at은 linkOpened에 쓰이지 않는다"
+    priority: must
+    verify: machine
+    status: active
+
+  - id: AC-26
+    source: [PRD-0001 AC 1.3.2]
+    description: "회원 상세는 다른 강사의 회원이면 없는 회원과 같은 404"
+    type: security
+    layers: [api, test]
+    assertion: "GET /instructor/members/{id} → 200 { id, name, memo, status, linkOpened }. 다른 강사의 회원 id와 없는 id는 같은 404 NOT_FOUND. id가 숫자가 아니면 400"
+    priority: must
+    verify: machine
+    status: active
+
+  - id: AC-27
+    source: [PRD-0001 AC 3.1.4, PRD-0001 AC 3.3.1, PRD-0001 AC 3.3.3, Q29]
+    description: "회원 수정은 보낸 필드만 바꾸고, 수강 종료는 삭제가 아니다"
+    type: behavior
+    layers: [api, test]
+    assertion: "PATCH /instructor/members/{id} { memo: '화요반' } → 200, memo만 바뀌고 name · status는 그대로. { name: null } → 400. { name: '' } · 51자 → 400. { memo: null } · { memo: '' } → memo null. { status: 'ENDED' } → status ENDED, member · member_link 행 그대로. 다시 { status: 'ACTIVE' } → ACTIVE. { status: 'DELETED' } · { status: null } → 400. {} → 200, 바뀌는 것 없음. ENDED 회원에 { status: 'ENDED' } → 200. 다른 강사의 id → 404이고 그 회원은 그대로. DELETE /instructor/members/{id} 경로가 없다"
+    priority: must
+    verify: machine
+    status: active
+
+  - id: AC-28
+    source: [PRD-0001 AC 4.3.1, PRD-0001 AC 4.3.2, PRD-0001 AC 3.3.4, PRD-0001 AC 5.1.3]
+    description: "링크를 재발급하면 이전 링크는 끊기고 개봉 상태는 처음으로 돌아간다"
+    type: behavior
+    layers: [schema, api, test]
+    assertion: "POST /instructor/members/{id}/link → 201 { linkUrl }. 이전 링크 행은 revoked_at이 채워져 남고, 새 행의 token_hash는 새 token의 해시이며 first_opened_at이 비어 있다. member.id는 그대로. ENDED 회원도 201. 다른 강사의 id → 404이고 링크가 그대로. 한 회원에 revoked_at이 빈 행을 두 개 넣으면 member_link_active_uidx 위반이다. 같은 회원에게 재발급 두 요청을 동시에 보내면 둘 다 201이고 revoked_at이 빈 행은 하나다"
     priority: must
     verify: machine
     status: active
