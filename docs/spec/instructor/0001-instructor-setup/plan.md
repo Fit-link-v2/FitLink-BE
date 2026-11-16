@@ -8,7 +8,7 @@
 |---|---|---|---|
 | 1 | PRD-0001 US 1 가입 · 로그인 · 세션 | AC-1 ~ AC-10 | 완료 |
 | 2 | US 2 시간표 · 오픈 범위, 매일 자정 작업 | AC-11 ~ AC-22 | 완료 |
-| 3 | US 3 회원 · US 4 링크 · US 5 개봉 상태 | AC-23 ~ AC-28 | 계획 |
+| 3 | US 3 회원 · US 4 링크 · US 5 개봉 상태 | AC-23 ~ AC-28 | 진행 중 (3.2 완료) |
 | 4 | US 3 수강권 · 회원 카드 · 월 정액 주기 | 추가 예정 | Phase 3 뒤 작성 |
 
 ### Phase 1 구조
@@ -383,17 +383,17 @@ flowchart LR
 
 ### 3.1 스키마 (V5)
 
-- [ ] RED: `[BE-0001 AC-23] member.name 0자 · 51자, memo 501자 INSERT는 CHECK 위반, status는 ACTIVE · ENDED만`
-- [ ] RED: `[BE-0001 AC-28] 한 회원에 revoked_at이 빈 member_link 두 번째 INSERT는 member_link_active_uidx 위반, 끊은 링크는 여러 개여도 된다`
-- [ ] RED: `[BE-0001 AC-24] 같은 token_hash 두 번째 INSERT는 유니크 위반(다른 회원이어도)`
-- [ ] GREEN: `V5__membership.sql`에 `member` · `member_link` · `member_owner_idx` · `member_link_active_uidx`(prd 3.1 DDL 그대로). `token_hash`에 32바이트 길이 CHECK를 더할지 정한다. 부분 유니크 조건(`WHERE revoked_at IS NULL`)을 빼면 테스트가 실패하는 것 확인
-- [ ] REFACTOR: `MembershipFixtures`(강사 · 회원 · 링크를 SQL로 만드는 도우미)
+- [x] RED: `[BE-0001 AC-23] member.name 0자 · 51자, memo 501자 INSERT는 CHECK 위반, status는 ACTIVE · ENDED만`
+- [x] RED: `[BE-0001 AC-28] 한 회원에 revoked_at이 빈 member_link 두 번째 INSERT는 member_link_active_uidx 위반, 끊은 링크는 여러 개여도 된다`
+- [x] RED: `[BE-0001 AC-24] 같은 token_hash 두 번째 INSERT는 유니크 위반(다른 회원이어도)`
+- [x] GREEN: `V5__membership.sql`에 `member` · `member_link` · `member_owner_idx` · `member_link_active_uidx`(prd 3.1 DDL 그대로). `token_hash`에 32바이트 길이 CHECK(`member_link_token_hash_length`)를 더했다. 부분 유니크 조건(`WHERE revoked_at IS NULL`)을 빼거나 길이 CHECK를 `>= 16`으로 풀면 테스트가 실패하는 것 확인. Phase 1의 "어느 테이블에도 토큰 컬럼이 없다" 테스트가 `member_link.token_hash`를 잡아서, 해시 컬럼 하나만 허용하도록 고쳤다. `member_link` 컬럼 목록을 고정하는 테스트를 더함
+- [x] REFACTOR: `MembershipFixtures`(강사 · 회원 · 링크를 SQL로 만드는 도우미) — RED를 쓰면서 바로 만들었다
 
 ### 3.2 링크 토큰 (LinkToken)
 
-- [ ] RED: `[BE-0001 AC-24] 토큰은 [A-Za-z0-9_-] 22자이고 해시는 SHA-256 32바이트`, `두 번 만든 토큰이 다르다`
-- [ ] GREEN: `model/LinkToken(String raw, byte[] hash)`. `SecureRandom` 16바이트 → base64url(패딩 없음). 해시는 `MessageDigest` SHA-256. `toString`은 원본을 내보내지 않는다
-- [ ] REFACTOR: 없음이면 건너뜀
+- [x] RED: `[BE-0001 AC-24] 토큰은 [A-Za-z0-9_-] 22자이고 해시는 SHA-256 32바이트`, `두 번 만든 토큰이 다르다`
+- [x] GREEN: `model/LinkToken(String raw, byte[] hash)`. `SecureRandom` 16바이트 → base64url(패딩 없음). 해시는 `MessageDigest` SHA-256. `toString`은 원본을 내보내지 않는다. 토큰을 12바이트로 줄이거나 `toString` 재정의를 빼면 테스트가 실패한다
+- [x] REFACTOR: 없음
 
 ### 3.3 회원 추가 `POST /instructor/members`
 
