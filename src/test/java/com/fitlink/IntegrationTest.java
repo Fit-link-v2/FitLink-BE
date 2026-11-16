@@ -13,7 +13,9 @@ import org.springframework.test.web.servlet.MockMvc;
 // DB가 닿는 테스트의 공통 기반. 설정이 같아야 Spring 컨텍스트 · 컨테이너를 재사용하므로
 // 클래스마다 설정을 더하지 않고 여기서만 바꾼다
 @Import({ TestcontainersConfiguration.class, TestClockConfiguration.class })
-@SpringBootTest(properties = { "KAKAO_CLIENT_ID=test-client-id", "KAKAO_CLIENT_SECRET=test-client-secret" })
+// 스케줄 실행을 꺼서 자정 작업이 테스트 도중 돌지 않게 한다. 작업은 테스트가 메서드를 직접 부른다
+@SpringBootTest(properties = { "KAKAO_CLIENT_ID=test-client-id", "KAKAO_CLIENT_SECRET=test-client-secret",
+		"fitlink.scheduling.enabled=false" })
 @AutoConfigureMockMvc
 public abstract class IntegrationTest {
 

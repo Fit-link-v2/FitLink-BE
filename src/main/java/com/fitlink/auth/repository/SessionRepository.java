@@ -46,4 +46,9 @@ public class SessionRepository {
 			.update();
 	}
 
+	// 만료 판정은 확인(touch)과 같이 DB의 now()로 한다. expires_at 인덱스로 찾는다
+	public int deleteExpired() {
+		return jdbc.sql("DELETE FROM auth_session WHERE expires_at <= now()").update();
+	}
+
 }
