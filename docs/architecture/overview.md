@@ -50,6 +50,7 @@ flowchart LR
 {모듈}/
   {모듈}Facade        다른 모듈이 부르는 유일한 창구(모듈 루트). 로직 없이 service에 넘긴다
   {모듈}...Command    Facade가 받는 값 / {모듈}...Info  Facade가 돌려주는 값
+  {모듈}...Event      다른 모듈에 알리는 이벤트(모듈 루트)
   controller/         HTTP 요청 · 응답
   dto/                HTTP 요청 · 응답 record. controller만 쓴다
   service/            유스케이스. 트랜잭션 경계
@@ -61,6 +62,7 @@ flowchart LR
 
 - 모듈 안의 호출은 `controller → service → repository` 한 방향이다
 - 다른 모듈은 상대 모듈 루트의 `{모듈}Facade`만 부른다. `model`은 내보내지 않고 `Info`로 바꿔 준다
+- 의존 방향을 거슬러 알려야 할 때(예: `instructor`가 범위를 늘렸음을 `schedule`에)는 발행 모듈 루트의 `{모듈}…Event`를 발행하고, 받는 모듈의 `service`가 같은 트랜잭션의 동기 리스너로 받는다([BE-ADR-0019](../decisions/0019-module-events.md))
 - 쓰기는 Transaction Script다. 서비스 메서드 하나가 트랜잭션 하나이고, 규칙은 SQL 조건과 DB 제약에 둔다. 전술적 DDD(Entity · Aggregate)는 쓰지 않는다
 - SQL은 `repository`에만 두고, Repository는 `record`를 주고받는다([BE-ADR-0012](../decisions/0012-jdbc-client.md))
 - 모듈 사이 경계는 Spring Modulith 테스트(`ModularityTests`)가, 모듈 안 방향과 모듈 루트 이름 규칙은 ArchUnit 테스트(`ArchitectureTests`)가 빌드마다 확인한다([BE-ADR-0017](../decisions/0017-package-structure.md))
@@ -82,6 +84,23 @@ flowchart LR
 - 예외는 `FitlinkException` 하나이고, 사유는 모듈의 `{모듈}ErrorCode` enum으로 구분한다. 응답 code는 enum 상수 이름이다([BE-ADR-0018](../decisions/0018-error-handling.md))
 - 처리기는 `common`에 하나만 두고 모든 컨트롤러에 적용한다. Spring MVC 예외는 원래 상태 코드를 지키고 본문만 같은 모양으로 바꾼다
 - 4xx는 warn, 5xx는 error 로그. 500 응답에는 원인을 담지 않는다
+
+### 정해진 시각에 도는 작업 · 모듈 이벤트
+
+```mermaid
+flowchart LR
+    cron["매일 0시 서울<br/>@Scheduled"] --> jobs["schedule.service.SlotJobs"]
+    ready["앱 시작<br/>ApplicationReadyEvent"] --> jobs
+    jobs -->|"모든 강사"| gen["SlotGeneration<br/>회차 생성 SQL"]
+    patch["PATCH /instructor/settings"] --> sts["instructor.service.SettingService"]
+    sts -. "InstructorOpenRangeExtendedEvent<br/>늘렸을 때만 · 같은 트랜잭션" .-> ol["schedule.service.OpenRangeListener"]
+    ol -->|"그 강사"| gen
+    cron --> clean["auth.service.SessionCleanupJob<br/>만료 세션 삭제"]
+```
+
+- 작업은 앱 안의 Spring `@Scheduled`로 돈다. 서버가 1대라([BE-ADR-0015](../decisions/0015-hosting-lightsail.md)) 중복 실행 잠금은 두지 않는다. 회차 생성은 `ON CONFLICT DO NOTHING` · 같은 시각 검사로 두 번 돌아도 결과가 같다([시간표 데이터 모델](../spec/schedule/data-model.md))
+- `@EnableScheduling`은 `FitlinkApplication` 안의 설정에 있고 `fitlink.scheduling.enabled=false`로 끈다. 통합 테스트는 끄고 작업 메서드를 직접 부른다. 앱 시작 생성은 이 설정과 상관없이 돈다
+- 작업이 실패하면 error 로그만 남긴다. 회차 생성은 매번 범위 전체를 다시 보므로 다음 실행이 채운다
 
 ### 인증 흐름
 
