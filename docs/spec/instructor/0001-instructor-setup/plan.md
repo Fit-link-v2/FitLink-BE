@@ -201,7 +201,8 @@ flowchart TB
             RS["RecurrenceService<br/>등록 · 끄기 · 켜기"]
             SS2["SlotService<br/>목록 · 상세 · 시각 변경 · 휴강 · 일회성"]
             GEN["SlotGeneration<br/>이어받기 · 회차 생성"]
-            JOB["SlotJobs<br/>자정 · 앱 시작 · OpenRangeExtended 리스너"]
+            JOB["SlotJobs<br/>자정 · 앱 시작"]
+            OL["OpenRangeListener<br/>InstructorOpenRangeExtendedEvent 리스너"]
         end
         subgraph sinfra["infra"]
             RR["RecurrenceRepository"]
@@ -210,7 +211,7 @@ flowchart TB
     end
     subgraph instructor["instructor 모듈"]
         STC["SettingController<br/>/instructor/settings"]
-        STS["SettingService<br/>변경 + OpenRangeExtended 발행"]
+        STS["SettingService<br/>변경 + InstructorOpenRangeExtendedEvent 발행"]
     end
     subgraph auth["auth 모듈"]
         CLN["SessionCleanupJob<br/>자정 만료 세션 삭제"]
@@ -218,8 +219,9 @@ flowchart TB
     RC --> RS --> GEN
     SLC --> SS2
     JOB --> GEN
+    OL --> GEN
     STC --> STS
-    STS -. "이벤트 (같은 트랜잭션)" .-> JOB
+    STS -. "이벤트 (같은 트랜잭션)" .-> OL
     GEN --> SR2
     RS --> RR
     SS2 --> SR2
@@ -228,7 +230,7 @@ flowchart TB
     CLN --> DB
 ```
 
-- 의존 방향은 `schedule → instructor` 그대로다. `instructor`는 `OpenRangeExtended(instructorId, today, now)`를 발행만 하고 `schedule`을 모른다. 이벤트 record는 `instructor.application`에 둔다
+- 의존 방향은 `schedule → instructor` 그대로다. `instructor`는 `InstructorOpenRangeExtendedEvent(instructorId, today, now)`를 발행만 하고 `schedule`을 모른다. 이벤트 record는 `instructor` 모듈 루트에 둔다(BE-ADR-0019)
 - 회차 생성 SQL은 `setting.open_range_days`를 JOIN으로 읽기만 한다. 쓰기는 `instructor`만 한다
 - 컨트롤러는 Phase 1처럼 `@AuthenticationPrincipal Long`으로 강사 id를 받는다
 - 자정 작업은 모듈마다 자기 `@Scheduled`를 갖는다. 월 정액 주기 생성(Phase 4 이후)이 "회차 생성 뒤 같은 `today`로" 붙을 자리는 그때 정한다
@@ -314,17 +316,17 @@ flowchart LR
 
 ### 2.8 오픈 범위 설정 `/instructor/settings`
 
-- [ ] RED: `[BE-0001 AC-21] GET → 14, PATCH 6 · 29 → 400`
-- [ ] RED: `[BE-0001 AC-21] 14 → 28이면 응답 전에 15 ~ 28일째 회차가 있다`, `28 → 7이면 범위 밖 슬롯이 남는다`
-- [ ] RED: `[BE-0001 AC-21] 회차 생성이 실패하면 PATCH가 실패하고 open_range_days 그대로` (실패는 테스트 안에서 `class_slot`에 `CHECK (false) NOT VALID` 제약을 잠시 건다. `NOT VALID`라 이미 있는 회차는 검사하지 않고 새 INSERT만 실패한다. `finally`에서 지우고, `@BeforeEach`도 `DROP CONSTRAINT IF EXISTS`로 남은 것을 지운다. TRUNCATE는 제약을 지우지 않기 때문이다. 빈을 바꿔 끼우면 Spring 컨텍스트가 새로 떠서 피한다)
-- [ ] GREEN: `instructor`의 `SettingController` · `SettingService`(UPDATE 뒤 늘었을 때만 `OpenRangeExtended` 발행), `schedule`의 동기 `@EventListener`
-- [ ] REFACTOR: `ModularityTests`로 `instructor → schedule` 의존이 없는지 확인
+- [x] RED: `[BE-0001 AC-21] GET → 14, PATCH 6 · 29 → 400`
+- [x] RED: `[BE-0001 AC-21] 14 → 28이면 응답 전에 15 ~ 28일째 회차가 있다`, `28 → 7이면 범위 밖 슬롯이 남는다`
+- [x] RED: `[BE-0001 AC-21] 회차 생성이 실패하면 PATCH가 실패하고 open_range_days 그대로` (실패는 테스트 안에서 `class_slot`에 `CHECK (false) NOT VALID` 제약을 잠시 건다. `NOT VALID`라 이미 있는 회차는 검사하지 않고 새 INSERT만 실패한다. `finally`에서 지우고, `@BeforeEach`도 `DROP CONSTRAINT IF EXISTS`로 남은 것을 지운다. TRUNCATE는 제약을 지우지 않기 때문이다. 빈을 바꿔 끼우면 Spring 컨텍스트가 새로 떠서 피한다)
+- [x] GREEN: `instructor`의 `SettingController` · `SettingService`(UPDATE 뒤 늘었을 때만 `InstructorOpenRangeExtendedEvent` 발행), `schedule`의 동기 `@EventListener`(`OpenRangeListener`) — 바꾸기 전 값은 `SELECT … FOR UPDATE`로 읽어 같은 강사의 동시 변경을 차례로 돌린다. 같은 값이나 줄이는 변경은 발행하지 않는다(28 → 28 · 28 → 7 테스트). 이벤트에는 요청에서 구한 오늘 · 지금을 싣고 리스너는 시계를 다시 읽지 않는다(이벤트를 직접 발행하는 리스너 테스트). 이벤트 record의 자리는 BE-ADR-0019로 정했다: 모듈 루트의 `{모듈}{무엇}Event`, ArchUnit 루트 이름 규칙에 `Event`를 더함. 변이 6개(`>=` · 항상 발행 · 트랜잭션 제거 · 틀린 오늘 · 리스너가 시계 읽기 · 리스너 제거)를 모두 테스트가 잡음
+- [x] REFACTOR: `ModularityTests`로 `instructor → schedule` 의존이 없는지 확인
 
 ### 2.9 매일 자정 · 앱 시작 작업
 
 - [ ] RED: `[BE-0001 AC-16] 강사 2명, Clock을 하루 넘겨 전체 작업을 돌리면 두 강사 모두 범위 끝 날 회차가 생긴다`, `ApplicationReadyEvent를 발행하면 회차가 생긴다`(앱 시작 리스너가 실제로 이어져 있는지)
 - [ ] RED: `[BE-0001 AC-22] 만료 · 로그아웃 미만료 · 유효 세션 중 만료 행만 지워지고, 지운 쿠키는 401`
-- [ ] GREEN: `SlotJobs`(`@Scheduled(cron = "0 0 0 * * *", zone = "Asia/Seoul")` + `ApplicationReadyEvent`), `SessionCleanupJob`, `@EnableScheduling`, `V4__auth_session_expires_idx.sql`
+- [ ] GREEN: `SlotJobs`(`@Scheduled(cron = "0 0 0 * * *", zone = "Asia/Seoul")` + `ApplicationReadyEvent`), `SessionCleanupJob`, `@EnableScheduling`, `V4__auth_session_expires_idx.sql`. 2.8 리뷰에서 넘어온 틈: 23:59에 오픈 범위를 늘리는 요청이 커밋되기 전에 자정 작업이 돌면, 작업은 커밋된 옛 범위로 만들고 요청은 어제 기준으로 만들어 새 범위의 마지막 하루가 다음 자정까지 빈다. 자정 작업이 `setting`을 `FOR SHARE`로 읽어 막을지 이때 정한다
 - [ ] REFACTOR: cron · zone 값이 AC와 같은지 확인하는 테스트(어노테이션 값을 읽음. 테스트에서는 스케줄 실행을 꺼 두므로). 작업 실패는 로그만 남기고 앱을 멈추지 않는다
 
 ### 2.10 doc-sync

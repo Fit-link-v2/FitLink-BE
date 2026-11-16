@@ -240,7 +240,7 @@ sequenceDiagram
 ```mermaid
 flowchart LR
     R["규칙 등록 · 다시 켜기<br/>(AC-11 · AC-13)"] --> T["꺼진 규칙 회차 이어받기<br/>(AC-14)"] --> G["회차 생성<br/>오픈 범위 · 지금 이후 · 같은 시각 건너뜀<br/>(AC-12 · AC-15)"]
-    S["오픈 범위 늘리기<br/>(AC-21)"] -->|"OpenRangeExtended"| G
+    S["오픈 범위 늘리기<br/>(AC-21)"] -->|"InstructorOpenRangeExtendedEvent"| G
     M["매일 0시 · 앱 시작<br/>(AC-16)"] --> G
     M --> X["만료 세션 삭제<br/>(AC-22)"]
     G --> DB[("class_slot")]
@@ -582,7 +582,7 @@ ON CONFLICT DO NOTHING;                                                         
 - 서버가 1대([BE-ADR-0015](../../../decisions/0015-hosting-lightsail.md))라 중복 실행을 막는 잠금은 두지 않는다. 두 번 돌아도 결과가 같다(AC 2.2.2)
 - 배치는 매번 오픈 범위 전체를 다시 본다. 빠진 날을 따로 기억하지 않아도 하루 실패한 뒤 다음 실행이 채운다
 - 자정 · 앱 시작 실행은 슬롯을 만든 뒤 월 정액 주기 생성([수강권 쓰기 경로](../../entitlement/write-paths.md) 2)을 이어서 돈다. 둘 다 같은 `$today`를 쓴다. 슬롯만 생기고 수강권 주기가 없으면 새로 열린 날짜를 예약할 때 NO_REMAINING이 된다
-- **모듈 방향.** `setting`은 `instructor` 모듈, 슬롯 생성은 `schedule` 모듈이다. `instructor`가 `schedule`을 부르면 의존 방향(`schedule → instructor`)이 뒤집혀 순환이 된다. 그래서 오픈 범위를 늘리는 `instructor`의 서비스는 `setting`을 UPDATE한 뒤 이벤트(`OpenRangeExtended(instructorId, today, now)`)만 발행하고, `schedule`이 그 이벤트를 받아 슬롯을 만든다. 같은 트랜잭션에서 즉시 채워야 하므로(AC 2.4.2) 동기 `@EventListener`로 받는다. 슬롯 생성이 실패하면 오픈 범위 변경도 롤백된다
+- **모듈 방향.** `setting`은 `instructor` 모듈, 슬롯 생성은 `schedule` 모듈이다. `instructor`가 `schedule`을 부르면 의존 방향(`schedule → instructor`)이 뒤집혀 순환이 된다. 그래서 오픈 범위를 늘리는 `instructor`의 서비스는 `setting`을 UPDATE한 뒤 이벤트(`InstructorOpenRangeExtendedEvent(instructorId, today, now)`)만 발행하고, `schedule`이 그 이벤트를 받아 슬롯을 만든다. 같은 트랜잭션에서 즉시 채워야 하므로(AC 2.4.2) 동기 `@EventListener`로 받는다. 슬롯 생성이 실패하면 오픈 범위 변경도 롤백된다
 - 월 정액 주기도 같은 이벤트를 `entitlement`가 받아 그 강사의 회원들에 대해 같은 트랜잭션에서 만든다([수강권 쓰기 경로](../../entitlement/write-paths.md) 2). 슬롯만 늘고 주기가 없으면 다음 자정까지 늘어난 날짜의 수업이 보이는데 예약하면 NO_REMAINING이다. 두 리스너가 요청과 같은 `$today` · `$now`를 쓰도록 이벤트에 둘 다 싣는다. 리스너가 `Clock`을 다시 읽지 않는다. 두 리스너는 서로 다른 테이블에 쓰므로 순서는 상관없다. 주기 생성은 월 정액마다 savepoint(트랜잭션 안에서 그 지점까지만 되돌리는 표시)를 두어, 한 건이 실패해도 오픈 범위 변경은 커밋된다
 
 반복 주기는 매주로 고정돼 있다. 격주 · 월 n번째 주는 PRD 1의 범위 밖이다(인터뷰 7번). 넣게 되면 `recurrence`에 `interval_weeks`와 `anchor_date` 두 컬럼이 붙는다. 기존 행은 각각 1과 생성일로 채우면 되므로 나중에 넣어도 비용이 낮다.
@@ -739,7 +739,7 @@ ALTER TABLE entitlement ADD CONSTRAINT entitlement_kind_no_overlap
 | 1 · AC 2.3.3 | 삭제 · 변경은 해당 슬롯에만 | `recurrence`와 `class_slot`을 분리. 규칙은 안 건드린다 |
 | (일회성 수업, PRD-0001 AC 추가 예정 Q38) | 반복 규칙 없이 한 번만 여는 수업. 지금 이후 · 오픈 범위 안 · 같은 시각 없음 | `class_slot.recurrence_id` NULL 허용 + `class_slot_time_uidx`. 시각 · 범위 검사는 애플리케이션. 규칙이 만든 슬롯의 소유자 일치는 복합 FK `class_slot_recurrence_owner_fk` |
 | 1 · AC 2.4.1 | 오픈 범위 7~28일 | `setting` CHECK open_range_days BETWEEN 7 AND 28 |
-| 1 · AC 2.4.2 | 늘리면 즉시 채움, 줄여도 슬롯은 남김 | `OpenRangeExtended` 이벤트로 같은 트랜잭션에서 슬롯 생성. 줄일 때는 DELETE 경로 없음 |
+| 1 · AC 2.4.2 | 늘리면 즉시 채움, 줄여도 슬롯은 남김 | `InstructorOpenRangeExtendedEvent` 이벤트로 같은 트랜잭션에서 슬롯 생성. 줄일 때는 DELETE 경로 없음 |
 | 1 · AC 3.1.2 | 동명이인 허용 | `member.name`에 UNIQUE 없음 (의도적 부재) |
 | 1 · AC 3.2.3 · 3 · AC 5.2.1 | 잔여는 0 이상 max_count 이하 | `entitlement` CHECK used_count 범위 |
 | 1 · AC 3.2.5 | 등록할 때 종류를 고름 | 등록 요청의 `kind`(`PASS` · `SUBSCRIPTION`). 월 정액은 `subscription`, 횟수권은 `entitlement`로 간다 |
@@ -1018,7 +1018,7 @@ Phase 단위로 나눠 만든다. 번호는 Flyway 파일 이름 `V{번호}__{�
 | Q14 | 카카오 이메일을 못 받으면 | 비즈 앱 전환이 막히면 `instructor.email`이 계속 비어 있다. 스키마는 이미 NULL을 허용한다 |
 | ~~Q17~~ | ~~슬롯 생성 배치의 SQL과 타임존 변환~~ | **해소.** 3.1 시간표 절의 슬롯 생성 쿼리. `(서울 날짜 + 시각) AT TIME ZONE 'Asia/Seoul'`로 바꾸고, 규칙 등록 · 오픈 범위 확대 · 매일 자정 · 앱 시작 때 같은 쿼리를 돈다. 오픈 범위 확대는 `instructor`가 이벤트를 발행하고 `schedule`이 받는다 |
 | ~~Q18~~ | ~~규칙을 끄고 같은 요일 · 시각으로 새 규칙을 만들면~~ | **해소.** 허용한다. 새 규칙(또는 다시 켠 규칙)이 꺼진 규칙의 오늘 이후 회차를 이어받고(정원은 원래 값), 같은 강사 · 같은 시각에 휴강 아닌 수업은 하나만 둔다(`class_slot_time_uidx`). 3.1 시간표 절 |
-| ~~Q19~~ | ~~오픈 범위를 늘릴 때 월 정액 주기도 즉시 만들 것인가~~ | **해소.** 만든다. `entitlement`도 `OpenRangeExtended`를 받아 같은 트랜잭션에서 그 강사의 주기를 만든다(3.1 시간표 절의 모듈 방향) |
+| ~~Q19~~ | ~~오픈 범위를 늘릴 때 월 정액 주기도 즉시 만들 것인가~~ | **해소.** 만든다. `entitlement`도 `InstructorOpenRangeExtendedEvent`를 받아 같은 트랜잭션에서 그 강사의 주기를 만든다(3.1 시간표 절의 모듈 방향) |
 | ~~Q20~~ | ~~AC 대 제약 표가 아직 모든 AC를 덮지 않는다~~ | **해소.** 1.2.1, 1.3.2, 2.1.4, 3.2.5, 3.2.13(3.2.7 대체), 3.3.3, 5.1.1을 채웠다. 남은 AC는 Phase마다 AC를 쓸 때 더한다 |
 | Q21 | 시작한 슬롯의 시각 변경 · 휴강 거부(API 2절)와 지난 시각으로 옮기기 거부(400)는 PRD에 AC가 없다 | 후속. PRD-0001 AC 2.3 · PRD-0003 AC 7에 AC 추가 |
 | ~~Q22~~ | ~~회원 목록 정렬(미개봉 → ACTIVE → ENDED)의 근거 AC가 없다~~ | **해소.** 이 순서로 확정하고 Phase AC로 고정한다. ENDED는 미개봉이어도 마지막 묶음이다(3.2 API 4절) |
