@@ -112,7 +112,7 @@ COMMIT;
 
 휴강을 `event_log`에 BOOKING_CANCELED로 남길지는 정하지 않았다(BE-0003 열린 질문 Q16).
 
-**개별 슬롯의 시각 변경(PRD 1 AC 2.3.2)은 예약이 있으면 막는다([DEC-0006](https://github.com/Fit-link-v2/Fit-link-PRD/blob/main/decisions/0006-booking-rules.md)).** 회원이 예약한 시각과 실제 시각이 달라지는데, 알림이 범위 밖이라 알릴 방법이 없다. 시각을 바꿔야 하면 휴강 후 새 슬롯을 만든다.
+**개별 슬롯의 시각 변경(PRD 1 AC 2.3.5)은 예약이 있으면 막는다([DEC-0006](https://github.com/Fit-link-v2/Fit-link-PRD/blob/main/decisions/0006-booking-rules.md)).** 회원이 예약한 시각과 실제 시각이 달라지는데, 알림이 범위 밖이라 알릴 방법이 없다. 시각을 바꿔야 하면 휴강 후 새 슬롯을 만든다.
 
 통보는 MVP에서 강사가 카톡으로 한다. PRD 4의 대기 통보와 같은 방식이다.
 

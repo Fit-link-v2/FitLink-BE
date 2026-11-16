@@ -113,7 +113,7 @@ criteria:
     status: active
 
   - id: AC-11
-    source: [PRD-0001 AC 2.1.5, Q2, Q34]
+    source: [PRD-0001 AC 2.1.5, PRD-0001 AC 2.1.8, Q2, Q34]
     description: "반복 규칙은 요일마다 하나씩 등록되고, 겹치면 전부 거부한다"
     type: validation
     layers: [schema, api, test]
@@ -136,7 +136,7 @@ criteria:
         cause: "날짜 + 시각을 서울이 아닌 DB 세션 타임존으로 읽음(AT TIME ZONE 누락)"
 
   - id: AC-13
-    source: [PRD-0001 AC 2.1.4, Q18]
+    source: [PRD-0001 AC 2.1.4, PRD-0001 AC 2.1.6, Q18]
     description: "규칙을 끄면 이후 생성만 멈추고, 다시 켜면 이어서 만든다"
     type: behavior
     layers: [api, test]
@@ -146,7 +146,7 @@ criteria:
     status: active
 
   - id: AC-14
-    source: [Q18]
+    source: [PRD-0001 AC 2.1.7, Q18]
     description: "꺼진 규칙의 남은 회차는 같은 요일 · 시각의 새 규칙이 이어받는다"
     type: behavior
     layers: [domain, test]
@@ -159,7 +159,7 @@ criteria:
         cause: "이어받기 없이 새 규칙의 (recurrence_id, occurs_on)로만 중복을 판단함"
 
   - id: AC-15
-    source: [Q18, Q33, PRD-0001 AC 2.3.4]
+    source: [PRD-0001 AC 2.6.1, PRD-0001 AC 2.6.2, Q18, Q33, PRD-0001 AC 2.3.4]
     description: "같은 강사의 같은 시각에 휴강 아닌 수업은 하나다"
     type: behavior
     layers: [schema, api, test]
@@ -189,7 +189,7 @@ criteria:
     status: active
 
   - id: AC-18
-    source: [PRD-0001 AC 2.3.2, PRD-0001 AC 2.3.3, Q21]
+    source: [PRD-0001 AC 2.3.3, PRD-0001 AC 2.3.5, PRD-0001 AC 2.3.6, Q21]
     description: "반복 회차는 그 회차의 시각만 같은 날 안에서 바꾼다"
     type: behavior
     layers: [api, test]
@@ -199,7 +199,7 @@ criteria:
     status: active
 
   - id: AC-19
-    source: [PRD-0001 AC 2.3.4, Q21]
+    source: [PRD-0001 AC 2.3.4, PRD-0001 AC 2.3.6, Q21]
     description: "휴강은 슬롯을 남기고 되돌릴 수 없다"
     type: behavior
     layers: [api, test]
@@ -209,7 +209,7 @@ criteria:
     status: active
 
   - id: AC-20
-    source: [Q33]
+    source: [PRD-0001 AC 2.5.1, PRD-0001 AC 2.5.2, PRD-0001 AC 2.5.3, PRD-0001 AC 2.5.4, Q33]
     description: "일회성 수업은 지금 이후 · 오픈 범위 안에 열고, 날짜까지 옮길 수 있다"
     type: behavior
     layers: [schema, api, test]
