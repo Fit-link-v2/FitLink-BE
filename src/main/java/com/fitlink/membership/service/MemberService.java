@@ -1,5 +1,7 @@
 package com.fitlink.membership.service;
 
+import com.fitlink.common.exception.CommonErrorCode;
+import com.fitlink.common.exception.FitlinkException;
 import com.fitlink.membership.config.MembershipProperties;
 import com.fitlink.membership.model.AddedMember;
 import com.fitlink.membership.model.IssuedLink;
@@ -8,6 +10,7 @@ import com.fitlink.membership.model.Member;
 import com.fitlink.membership.model.MemberStatus;
 import com.fitlink.membership.repository.MemberLinkRepository;
 import com.fitlink.membership.repository.MemberRepository;
+import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,6 +37,16 @@ public class MemberService {
 		links.insert(memberId, token.hash());
 		return new AddedMember(new Member(memberId, name, memo, MemberStatus.ACTIVE, false),
 				new IssuedLink(properties.linkBaseUrl() + "/m/" + token.raw()));
+	}
+
+	@Transactional(readOnly = true)
+	public List<Member> list(long instructorId) {
+		return members.findAll(instructorId);
+	}
+
+	@Transactional(readOnly = true)
+	public Member get(long instructorId, long memberId) {
+		return members.find(instructorId, memberId).orElseThrow(() -> new FitlinkException(CommonErrorCode.NOT_FOUND));
 	}
 
 }
