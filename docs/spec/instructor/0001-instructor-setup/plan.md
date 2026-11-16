@@ -331,9 +331,9 @@ flowchart LR
 
 ### 2.10 doc-sync
 
-- [ ] REFACTOR: 시간표 `POLICY.md` 규칙 절 · `data-model.md`, 강사 `POLICY.md`(오픈 범위), `overview.md`(자정 작업 · 이벤트), `feature.yaml` 상태
+- [x] REFACTOR: 시간표 `POLICY.md` 규칙 절 · `data-model.md`, 강사 `POLICY.md`(오픈 범위), `overview.md`(자정 작업 · 이벤트), `feature.yaml` 상태
 
 ## Phase 2 끝난 뒤 확인
 
-- [ ] `./gradlew test` 전체 통과, `ModularityTests` 통과
-- [ ] local에서 앱을 띄워 규칙 등록 → 슬롯 목록 → 시각 변경 · 휴강 → 일회성 수업 → 오픈 범위 변경을 curl로 한 번씩
+- [x] `./gradlew test` 전체 통과(203개), `ModularityTests` 통과
+- [x] local에서 앱을 띄워 규칙 등록 → 슬롯 목록 → 시각 변경 · 휴강 → 일회성 수업 → 오픈 범위 변경을 curl로 한 번씩 — 2026-11-16. 점검용 강사 · 세션은 DB에 직접 넣고 끝난 뒤 지웠다. 앱 시작 회차 생성 로그, 같은 시각 409, 28일로 늘린 뒤 12-01 · 12-08 회차, 6일 400까지 확인
