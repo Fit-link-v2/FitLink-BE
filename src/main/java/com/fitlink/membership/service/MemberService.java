@@ -7,6 +7,7 @@ import com.fitlink.membership.model.AddedMember;
 import com.fitlink.membership.model.IssuedLink;
 import com.fitlink.membership.model.LinkToken;
 import com.fitlink.membership.model.Member;
+import com.fitlink.membership.model.MemberChange;
 import com.fitlink.membership.model.MemberStatus;
 import com.fitlink.membership.repository.MemberLinkRepository;
 import com.fitlink.membership.repository.MemberRepository;
@@ -46,7 +47,19 @@ public class MemberService {
 
 	@Transactional(readOnly = true)
 	public Member get(long instructorId, long memberId) {
-		return members.find(instructorId, memberId).orElseThrow(() -> new FitlinkException(CommonErrorCode.NOT_FOUND));
+		return members.find(instructorId, memberId).orElseThrow(MemberService::notFound);
+	}
+
+	@Transactional
+	public Member change(long instructorId, long memberId, MemberChange change) {
+		if (members.update(instructorId, memberId, change) == 0) {
+			throw notFound();
+		}
+		return get(instructorId, memberId);
+	}
+
+	private static FitlinkException notFound() {
+		return new FitlinkException(CommonErrorCode.NOT_FOUND);
 	}
 
 }
