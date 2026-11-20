@@ -49,7 +49,7 @@ flowchart LR
 
 ```
 {모듈}/
-  {모듈}Facade        다른 모듈이 부르는 유일한 창구(모듈 루트). 로직 없이 service에 넘긴다
+  {모듈}Facade        다른 모듈이 부르는 유일한 창구(모듈 루트). Info로 바꾸는 계산 말고는 로직 없이 service에 넘긴다
   {모듈}...Command    Facade가 받는 값 / {모듈}...Info  Facade가 돌려주는 값
   {모듈}...Event      다른 모듈에 알리는 이벤트(모듈 루트)
   controller/         HTTP 요청 · 응답

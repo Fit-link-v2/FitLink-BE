@@ -517,7 +517,7 @@ flowchart LR
 
 - [x] REFACTOR: `bff` 모듈(`package-info.java` · `controller` · `dto` · `service`), `MembershipFacade` · `MembershipMemberInfo`. `MemberController`의 GET 두 개와 목록 · 상세 응답 record를 `bff`로 옮기고 `MemberReadApiTests`도 옮긴다. 단언은 바꾸지 않는다(동작 그대로). 회원 추가 · 수정 응답은 `membership`에 남는 카드 없는 회원 record다
 - [x] REFACTOR: `ModularityTests` 통과. 다른 모듈에 `bff/service`를 부르는 클래스를 잠시 만들어 `ModularityTests`가 실패하는지 확인
-- 정한 것: 쓰기 응답 record 이름은 `membership/dto/MemberResponse`다(JSON 모양 그대로). `ArchitectureTests`가 모듈 루트의 `Info`를 service에서만 받게 하므로 `bff/model/InstructorMember`를 더해 `InstructorMemberView`가 `MembershipMemberInfo`를 이것으로 바꿔 넘긴다. 미개봉 판정(ACTIVE이고 링크를 열지 않음)은 `MembershipMemberInfo.unopened()`가 정하고 `bff`는 세기만 한다
+- 정한 것: 쓰기 응답 record 이름은 `membership/dto/MemberResponse`다(JSON 모양 그대로). `ArchitectureTests`가 모듈 루트의 `Info`를 service에서만 받게 하므로 `bff/model/InstructorMember`를 더해 `InstructorMemberView`가 `MembershipMemberInfo`를 이것으로 바꿔 넘긴다. 미개봉 판정(ACTIVE이고 링크를 열지 않음)은 `MembershipFacade`가 enum으로 계산해 `MembershipMemberInfo.unopened` 필드에 담고 `bff`는 세기만 한다
 
 ### 4.2 스키마 (V6)
 
