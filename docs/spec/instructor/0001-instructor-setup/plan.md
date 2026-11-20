@@ -8,7 +8,7 @@
 |---|---|---|---|
 | 1 | PRD-0001 US 1 가입 · 로그인 · 세션 | AC-1 ~ AC-10 | 완료 |
 | 2 | US 2 시간표 · 오픈 범위, 매일 자정 작업 | AC-11 ~ AC-22 | 완료 |
-| 3 | US 3 회원 · US 4 링크 · US 5 개봉 상태 | AC-23 ~ AC-28 | 진행 중 (3.4 완료) |
+| 3 | US 3 회원 · US 4 링크 · US 5 개봉 상태 | AC-23 ~ AC-28 | 진행 중 (3.5 완료) |
 | 4 | US 3 수강권 · 회원 카드 · 월 정액 주기 | 추가 예정 | Phase 3 뒤 작성 |
 
 ### Phase 1 구조
@@ -415,10 +415,10 @@ flowchart LR
 
 ### 3.5 수정 · 수강 종료 · 다시 활성화 `PATCH /instructor/members/{id}`
 
-- [ ] RED: `[BE-0001 AC-27] memo만 보내면 memo만 바뀐다`, `name null → 400`, `name '' · 51자 → 400`, `memo null · '' → null`
-- [ ] RED: `[BE-0001 AC-27] ENDED → 행 · 링크 그대로, 다시 ACTIVE`, `status DELETED · null → 400`, `{} → 200 그대로`, `ENDED에 ENDED → 200`, `다른 강사 id → 404, 그 회원 그대로`
-- [ ] GREEN: 보낸 필드만 SET하는 UPDATE(`WHERE id = ? AND instructor_id = ?`), 0행이면 404. "보냈는지"를 구분하는 방법을 여기서 정한다
-- [ ] REFACTOR: 없음이면 건너뜀
+- [x] RED: `[BE-0001 AC-27] memo만 보내면 memo만 바뀐다`, `name null → 400`, `name '' · 51자 → 400`, `memo null · '' → null`
+- [x] RED: `[BE-0001 AC-27] ENDED → 행 · 링크 그대로, 다시 ACTIVE`, `status DELETED · null → 400`, `{} → 200 그대로`, `ENDED에 ENDED → 200`, `다른 강사 id → 404, 그 회원 그대로`
+- [x] GREEN: 보낸 필드만 SET하는 UPDATE(`WHERE id = ? AND instructor_id = ?`), 0행이면 404. "보냈는지"를 구분하는 방법을 여기서 정한다 — JSON 트리(`JsonNode`)로 받아 `MemberChangeRequest.from`이 필드마다 `has` · `isNull`로 나눈다. `Optional` 필드 record는 기본 설정으로는 구분하지 못한다. Jackson 3은 보내지 않은 필드도 `Optional.empty()`로 채워 "null을 보냄"과 같아진다(테스트로 확인). `USE_NULL_FOR_MISSING_REFERENCE_VALUES`를 켜면 구분되지만 앱 전체 설정이라 쓰지 않았다. 그래서 검사는 Bean Validation이 아니라 이 메서드가 하고, 길이는 회원 추가와 같은 값(이름 1 ~ 50 · 메모 500)이다. 문자열이 아닌 값 · 객체가 아닌 본문 · 소문자 상태도 400. UPDATE 하나로 `coalesce`와 `CASE WHEN :memoChanged`를 써서 보낸 필드만 바꾸고, 빈 본문도 행이 있으면 1행이라 200이다. 응답은 바꾼 뒤 다시 읽는다. 변이 9개 중 8개를 테스트가 잡음. UPDATE의 소유자 조건은 빼도 살아남는다: 남의 회원을 바꾼 뒤 다시 읽기가 404를 던져 같은 트랜잭션이 되돌리기 때문이다. 이중 방어로 남긴다. 리뷰 반영: 400의 `fields[0].name` 확인, 문자열이 아닌 상태 · 객체 이름 · 깨진 JSON · 빈 본문 · 여러 필드 한 번에 테스트 추가. 오류는 처음 걸린 필드 하나만 준다(추가는 Bean Validation이라 모두 준다). 모르는 필드(오타 포함)는 추가와 같이 무시한다
+- [x] REFACTOR: 없음. 이름 · 메모 규칙이 추가(Bean Validation)와 수정(직접 검사) 두 곳에 있다. 둘 다 테스트가 경계값을 고정한다
 
 ### 3.6 링크 재발급 `POST /instructor/members/{id}/link`
 

@@ -1,6 +1,7 @@
 package com.fitlink.membership.repository;
 
 import com.fitlink.membership.model.Member;
+import com.fitlink.membership.model.MemberChange;
 import com.fitlink.membership.model.MemberStatus;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -56,6 +57,24 @@ public class MemberRepository {
 			.param("instructorId", instructorId)
 			.query(MemberRepository::member)
 			.optional();
+	}
+
+	// 보낸 필드만 바꾼다. 빈 변경도 행이 있으면 1을 돌려준다. 0이면 남의 회원이거나 없는 회원이다
+	public int update(long instructorId, long memberId, MemberChange change) {
+		return jdbc.sql("""
+				UPDATE member
+				   SET name   = coalesce(:name, name),
+				       memo   = CASE WHEN :memoChanged THEN :memo ELSE memo END,
+				       status = coalesce(:status, status)
+				 WHERE id = :memberId AND instructor_id = :instructorId
+				""")
+			.param("name", change.name())
+			.param("memoChanged", change.memoChanged())
+			.param("memo", change.memo())
+			.param("status", change.status() == null ? null : change.status().name())
+			.param("memberId", memberId)
+			.param("instructorId", instructorId)
+			.update();
 	}
 
 	private static Member member(ResultSet rs, int row) throws SQLException {

@@ -2,6 +2,7 @@ package com.fitlink.membership.controller;
 
 import com.fitlink.membership.dto.MemberAddRequest;
 import com.fitlink.membership.dto.MemberAddedResponse;
+import com.fitlink.membership.dto.MemberChangeRequest;
 import com.fitlink.membership.dto.MemberDetailResponse;
 import com.fitlink.membership.dto.MemberListResponse;
 import com.fitlink.membership.model.AddedMember;
@@ -12,11 +13,13 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import tools.jackson.databind.JsonNode;
 
 @RestController
 @RequestMapping("/instructor/members")
@@ -48,6 +51,13 @@ class MemberController {
 	@GetMapping("/{id}")
 	MemberDetailResponse get(@AuthenticationPrincipal Long instructorId, @PathVariable long id) {
 		return MemberDetailResponse.of(members.get(instructorId, id));
+	}
+
+
+	@PatchMapping("/{id}")
+	MemberDetailResponse change(@AuthenticationPrincipal Long instructorId, @PathVariable long id,
+			@RequestBody JsonNode body) {
+		return MemberDetailResponse.of(members.change(instructorId, id, MemberChangeRequest.from(body)));
 	}
 
 }
