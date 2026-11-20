@@ -1,6 +1,7 @@
 package com.fitlink.membership;
 
 import com.fitlink.membership.model.Member;
+import com.fitlink.membership.model.MemberStatus;
 import com.fitlink.membership.service.MemberService;
 import java.util.List;
 import org.springframework.stereotype.Component;
@@ -26,9 +27,11 @@ public class MembershipFacade {
 		return info(members.get(instructorId, memberId));
 	}
 
+	// 수강 종료(ENDED) 회원은 링크를 열지 않았어도 미개봉 수에 넣지 않는다
 	private static MembershipMemberInfo info(Member member) {
+		boolean unopened = member.status() == MemberStatus.ACTIVE && !member.linkOpened();
 		return new MembershipMemberInfo(member.id(), member.name(), member.memo(), member.status().name(),
-				member.linkOpened());
+				member.linkOpened(), unopened);
 	}
 
 }
