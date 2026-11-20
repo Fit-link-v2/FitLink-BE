@@ -30,7 +30,7 @@ flowchart LR
 
 ## 모듈
 
-배포 단위는 하나이고, 안에서 도메인 6개를 최상위 패키지로 나눈다([BE-ADR-0011](../decisions/0011-modular-monolith.md)). 패키지 이름은 `docs/spec`의 도메인 폴더 이름과 같다. 로그인 · 세션은 도메인이 아닌 `auth` 모듈에 둔다([BE-ADR-0016](../decisions/0016-auth-module.md)).
+배포 단위는 하나이고, 안에서 도메인 6개를 최상위 패키지로 나눈다([BE-ADR-0011](../decisions/0011-modular-monolith.md)). 패키지 이름은 `docs/spec`의 도메인 폴더 이름과 같다. 로그인 · 세션은 도메인이 아닌 `auth` 모듈에 둔다([BE-ADR-0016](../decisions/0016-auth-module.md)). 여러 도메인의 데이터를 한 응답에 모으는 조회 API는 맨 위의 `bff` 모듈에 둔다([BE-ADR-0020](../decisions/0020-bff-module.md)).
 
 | 모듈 | 테이블 | 의존하는 모듈 |
 |---|---|---|
@@ -38,11 +38,12 @@ flowchart LR
 | auth | auth_session | instructor |
 | schedule | recurrence · class_slot | instructor |
 | membership | member · member_link | instructor |
-| entitlement | entitlement · subscription · entitlement_adjustment | membership |
+| entitlement | entitlement · subscription · entitlement_adjustment | membership · instructor(오픈 범위 늘림 이벤트 · 설정 읽기) |
 | booking | booking · waitlist | membership · schedule · entitlement |
 | analytics | event_log | membership · schedule |
+| bff | 없음 | 조립하는 도메인의 Facade(회원 목록 · 상세는 membership · entitlement). 아무 모듈도 bff를 부르지 않는다 |
 
-의존 방향은 [컨텍스트 맵](context-map.md)의 외래 키 방향과 같다. 순환을 만들지 않고, Spring Modulith 검증 테스트가 빌드마다 확인한다.
+의존 방향은 [컨텍스트 맵](context-map.md)의 외래 키 방향과 같다(`auth` · `bff`는 테이블 관계가 아니라 쓰는 쪽에서 아래로 향한다). 순환을 만들지 않고, Spring Modulith 검증 테스트가 빌드마다 확인한다.
 
 ### 모듈 안의 구조
 
@@ -62,6 +63,7 @@ flowchart LR
 
 - 모듈 안의 호출은 `controller → service → repository` 한 방향이다
 - 다른 모듈은 상대 모듈 루트의 `{모듈}Facade`만 부른다. `model`은 내보내지 않고 `Info`로 바꿔 준다
+- 같은 URL이라도 쓰기는 도메인 모듈, 여러 도메인을 모으는 읽기는 `bff`에 둔다. `bff`는 Facade의 Info를 짝짓기만 하고 SQL · 규칙을 갖지 않는다([BE-ADR-0020](../decisions/0020-bff-module.md))
 - 의존 방향을 거슬러 알려야 할 때(예: `instructor`가 범위를 늘렸음을 `schedule`에)는 발행 모듈 루트의 `{모듈}…Event`를 발행하고, 받는 모듈의 `service`가 같은 트랜잭션의 동기 리스너로 받는다([BE-ADR-0019](../decisions/0019-module-events.md))
 - 쓰기는 Transaction Script다. 서비스 메서드 하나가 트랜잭션 하나이고, 규칙은 SQL 조건과 DB 제약에 둔다. 전술적 DDD(Entity · Aggregate)는 쓰지 않는다
 - SQL은 `repository`에만 두고, Repository는 `record`를 주고받는다([BE-ADR-0012](../decisions/0012-jdbc-client.md))
