@@ -520,11 +520,13 @@ flowchart LR
 
 ### 4.2 스키마 (V6)
 
-- [ ] RED: `[BE-0001 AC-31] 같은 회원의 PASS와 SUBSCRIPTION 행 기간이 겹치면 entitlement_kind_no_overlap 위반, 같은 종류는 겹쳐도 된다`
-- [ ] RED: `[BE-0001 AC-30] subscription_end · subscription_four_week_multiple · subscription_max_length CHECK`, `[BE-0001 AC-32] 같은 source_id · window_start 두 번째 INSERT는 entitlement_period_uidx 위반`
-- [ ] RED: `[BE-0001 AC-29] max_count 0 · 1000, used_count 범위 밖, kind와 source_id 모양이 다르면 CHECK 위반`
-- [ ] GREEN: `V6__entitlement.sql`(prd 3.1 수강권 · 월 정액 DDL 그대로: `btree_gist`, `subscription`, `entitlement`, 인덱스 · 제약). 조건을 하나씩 빼면 테스트가 실패하는 것 확인
-- [ ] REFACTOR: `EntitlementFixtures`
+- [x] RED: `[BE-0001 AC-31] 같은 회원의 PASS와 SUBSCRIPTION 행 기간이 겹치면 entitlement_kind_no_overlap 위반, 같은 종류는 겹쳐도 된다`
+- [x] RED: `[BE-0001 AC-30] subscription_end · subscription_four_week_multiple · subscription_max_length CHECK`, `[BE-0001 AC-32] 같은 source_id · window_start 두 번째 INSERT는 entitlement_period_uidx 위반`
+- [x] RED: `[BE-0001 AC-29] max_count 0 · 1000, used_count 범위 밖, kind와 source_id 모양이 다르면 CHECK 위반`
+- [x] GREEN: `V6__entitlement.sql`(prd 3.1 수강권 · 월 정액 DDL 그대로: `btree_gist`, `subscription`, `entitlement`, 인덱스 · 제약). 조건을 하나씩 빼면 테스트가 실패하는 것 확인
+- [x] REFACTOR: `EntitlementFixtures`
+
+변이 34건 중 31건을 테스트가 잡았다. 남은 3건(부분 유니크의 `WHERE source_id IS NOT NULL` 제거, `subscription_max_length` 336 → 337, `subscription_range_order` 제거)은 동작이 같다. NULL끼리는 기본으로 유니크 비교를 하지 않고, 기간은 `subscription_end` 때문에 7일 단위로만 늘며, `starts_on <= ends_on`은 `subscription_end`와 `period_count > 0`에서 따라 나온다. 준비 데이터 `EntitlementFixtures`는 테스트를 쓸 때 같이 만들었다.
 
 ### 4.3 횟수권 등록 `POST /instructor/members/{id}/entitlements`
 
