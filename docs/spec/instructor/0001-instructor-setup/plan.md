@@ -561,6 +561,7 @@ flowchart LR
 ### 4.7 bff에 카드 붙이기
 
 - [ ] RED: `[BE-0001 AC-34] 목록 frontCard = 맨 앞, 수강권 없음 · 만료만 → null`, `상세 cards 전부, EXPIRED 맨 뒤`, `회원 3명 목록의 카드 조회 SQL 1번`
+- [ ] RED: `회원 목록 · 상세 조회는 읽기 전용 · REPEATABLE READ 트랜잭션 안에서 돈다`(조회 중 `TransactionSynchronizationManager.isCurrentTransactionReadOnly()` · `getCurrentTransactionIsolationLevel()` 값을 테스트가 받아 본다). 4.1 뒤 `InstructorMemberView`의 readOnly · isolation을 깨도 잡는 테스트가 없다
 - [ ] GREEN: `InstructorMemberView`가 `MembershipFacade` 목록 → id 목록으로 `EntitlementFacade.cards` 한 번 → 짝짓기. 읽기 전용 · REPEATABLE READ
 - [ ] REFACTOR: 응답 record 정리
 
