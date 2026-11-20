@@ -3,7 +3,7 @@
 FitLink 백엔드 개발 레포. 개인 강사의 그룹 수업 예약 서비스의 서버 코드와 설계 문서를 함께 둔다.
 
 - 스택: Java 25 · Spring Boot 4.1 · Spring Modulith, PostgreSQL 17 ([아키텍처 개요](docs/architecture/overview.md))
-- 상태: 기능 0001 Phase 1(카카오 로그인 · 세션) 구현 중
+- 상태: 기능 0001 강사 세팅 구현 중(Phase 1 로그인 · Phase 2 시간표 완료, Phase 3 회원 · 링크 완료, 다음은 Phase 4 수강권)
 
 ## 구조
 
@@ -17,6 +17,7 @@ FitLink-BE/
                               도메인 모듈. 안은 controller · dto · service · model · repository · exception,
                               다른 모듈에는 루트의 {모듈}Facade와 {모듈}…Event만 연다
     auth/                     로그인 · 세션 · Spring Security 설정 (도메인이 아닌 기술 모듈)
+    bff/                      여러 도메인을 한 응답에 모으는 조회 API (기술 모듈. 테이블 · SQL 없음)
     common/                   여러 모듈이 같이 쓰는 코드 (시계 설정, 에러 응답 모양과 공통 에러 처리)
   src/main/resources/
     application.yml           공통 설정

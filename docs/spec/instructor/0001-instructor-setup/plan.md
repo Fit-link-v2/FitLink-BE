@@ -9,7 +9,7 @@
 | 1 | PRD-0001 US 1 가입 · 로그인 · 세션 | AC-1 ~ AC-10 | 완료 |
 | 2 | US 2 시간표 · 오픈 범위, 매일 자정 작업 | AC-11 ~ AC-22 | 완료 |
 | 3 | US 3 회원 · US 4 링크 · US 5 개봉 상태 | AC-23 ~ AC-28 | 완료 |
-| 4 | US 3 수강권 · 회원 카드 · 월 정액 주기 | 추가 예정 | Phase 3 뒤 작성 |
+| 4 | US 3 수강권 · 회원 카드 · 월 정액 주기 | AC-29 ~ AC-35 | 계획 |
 
 ### Phase 1 구조
 
@@ -442,4 +442,140 @@ flowchart LR
 
 - [x] `./gradlew test` 전체 통과(277개), `ModularityTests` 통과
 - [x] local에서 앱을 띄워 회원 추가 → 목록 → 수정 · 수강 종료 → 재발급을 curl로 한 번씩. 응답의 `linkUrl` 토큰이 앱 로그에 없는지 확인 — 2026-11-18. 점검용 강사 · 세션은 DB에 직접 넣고 끝난 뒤 지웠다. V5 적용, 이름 공백 제거, 응답 `Cache-Control: no-store`, 공백 이름 400, 목록 순서(링크 연 회원이 뒤, `Bob` → `amy` 코드 순), 메모 지우기 + 종료, ENDED 재발급 뒤 미개봉, 이전 링크 끊김 · 해시 32바이트, 없는 id 404, 앱 로그에 토큰 2개 모두 0회
+
+## Phase 4: PRD-0001 US 3 수강권 — 등록 · 카드 · 월 정액 주기 · 잔여 수정
+
+### Phase 4 구조
+
+```mermaid
+flowchart TB
+    subgraph bff["bff 모듈 (BE-ADR-0020)"]
+        BC["controller/InstructorMemberController<br/>GET /instructor/members, /{id}"]
+        BS["service/InstructorMemberView<br/>읽기 전용 트랜잭션 · REPEATABLE READ"]
+    end
+    subgraph membership["membership 모듈"]
+        MF["MembershipFacade<br/>목록 · 상세 Info, 등록용 회원 잠금"]
+        MC["controller/MemberController<br/>POST · PATCH · POST /link"]
+    end
+    subgraph entitlement["entitlement 모듈"]
+        EF["EntitlementFacade<br/>회원 id 목록 → 카드 Info"]
+        EC["controller/EntitlementController<br/>POST /instructor/members/{id}/entitlements<br/>POST /instructor/entitlements/{id}/adjust"]
+        ES["service/EntitlementService<br/>등록 · 잔여 수정"]
+        PG["service/PeriodGeneration<br/>주기 생성"]
+        PJ["service/PeriodJobs<br/>자정 · 앱 시작"]
+        OL["service/OpenRangeListener<br/>오픈 범위 이벤트"]
+        CR["service/CardReader<br/>카드 계산 · 순서"]
+    end
+    subgraph instructor["instructor 모듈"]
+        EV["InstructorOpenRangeExtendedEvent"]
+    end
+    BC --> BS
+    BS --> MF
+    BS --> EF
+    EF --> CR
+    EC --> ES
+    ES -->|"회원 잠금 · 상태"| MF
+    ES --> PG
+    PJ --> PG
+    EV -. "같은 트랜잭션" .-> OL
+    OL --> PG
+```
+
+- 시작 전제: Phase 3의 PR(3.5 ~ 3.8)이 main에 머지된 뒤 시작한다. 4.1이 `MemberController`를 고치므로 3.5 · 3.6과 부딪힌다
+- 의존: `bff → membership · entitlement`, `entitlement → membership · instructor`. `membership`은 `entitlement`를 모른다. `bff`의 하위 폴더는 모듈 내부라 다른 모듈이 의존하면 `ModularityTests`가 실패한다(별도 규칙 없음)
+- 쓰기 응답(회원 추가 · 수정)은 카드 없는 회원 정보다. 카드가 있는 응답은 `bff`의 목록 · 상세뿐이다
+- 수강권 등록의 회원 확인 · 잠금은 `MembershipFacade`로 한다(등록 트랜잭션 안에서 `SELECT status … FOR NO KEY UPDATE`, 소유자 조건). SQL은 `membership` 안에 있다
+- 주기 생성 SQL은 `member` · `setting`을 JOIN으로 읽기만 한다(시간표 회차 생성이 `setting`을 JOIN하는 것과 같은 예외). 쓰기는 `entitlement` 테이블에만 한다
+- 자정 주기 생성은 `entitlement`의 자기 `@Scheduled`로 돈다. 시간표 작업과 같은 방식(1분 뒤 시각의 날짜를 오늘로)이라 같은 날짜를 쓴다. 두 작업은 서로 다른 테이블에 쓰므로 순서를 맞추지 않는다(prd 3.1 시간표 절도 이렇게 고쳤다)
+- 에러 코드는 `entitlement/exception`의 enum, `entitlement_kind_no_overlap` → ENTITLEMENT_PERIOD_OVERLAP은 제약 대응표(BE-ADR-0018)
+
+### 시각 · 테스트 방식
+
+- "오늘"은 `Clock`(서울)에서 요청 · 작업 시작 때 한 번 구해 SQL에 넘긴다. 기본 테스트 시계는 2026-11-12 목요일 12:00
+- 수강권 · 월 정액 준비 데이터는 SQL로 넣는 `EntitlementFixtures`를 둔다. 회원은 `MembershipFixtures`를 쓴다
+- 건별 실패는 Phase 2처럼 테스트 안에서 `CHECK (...) NOT VALID` 제약을 잠시 건다(특정 `source_id`만 실패하게)
+- 동시 등록은 3.6처럼 회원 행을 테스트가 먼저 잠그고, 두 요청이 모두 잠금을 기다리는 것(`pg_stat_activity`)을 확인한 뒤 놓는다
+- "카드 조회 SQL이 한 번"은 카드 SQL에 식별 주석(예: `/* member cards */`)을 달고, 테스트가 `org.springframework.jdbc.core.JdbcTemplate`를 DEBUG로 낮춰 출력에서 그 주석이 나온 횟수를 센다
+
+### 진행 순서와 병렬 가능 묶음
+
+```mermaid
+flowchart LR
+    T41["4.1 bff · MembershipFacade<br/>회원 GET 이동 (리팩터링)"] --> T43["4.3 횟수권 등록"]
+    T42["4.2 스키마 V6"] --> T43 --> T44["4.4 월 정액 등록 · 겹침"]
+    T44 --> T45["4.5 주기 생성 작업 · 이벤트"]
+    T44 --> T46["4.6 카드 계산"] --> T47["4.7 bff에 카드"]
+    T41 --> T47
+    T46 --> T48["4.8 잔여 수정"]
+    T45 & T47 & T48 --> T49["4.9 doc-sync"]
+```
+
+- 처음 묶음: 4.1과 4.2는 파일이 겹치지 않아 동시에 할 수 있다. 4.3은 4.1이 만든 `MembershipFacade`에 회원 잠금 메서드를 더하므로 4.1 · 4.2 뒤다
+- 다음 묶음: 4.4 뒤 4.5와 4.6은 겹치지 않는다. 4.7(bff)과 4.8(잔여 수정 응답이 카드)은 4.6 뒤에 서로 겹치지 않는다
+
+### 4.1 bff 모듈과 회원 목록 · 상세 GET 이동 (리팩터링)
+
+- [ ] REFACTOR: `bff` 모듈(`package-info.java` · `controller` · `dto` · `service`), `MembershipFacade` · `MembershipMemberInfo`. `MemberController`의 GET 두 개와 목록 · 상세 응답 record를 `bff`로 옮기고 `MemberReadApiTests`도 옮긴다. 단언은 바꾸지 않는다(동작 그대로). 회원 추가 · 수정 응답은 `membership`에 남는 카드 없는 회원 record다
+- [ ] REFACTOR: `ModularityTests` 통과. 다른 모듈에 `bff/service`를 부르는 클래스를 잠시 만들어 `ModularityTests`가 실패하는지 확인
+
+### 4.2 스키마 (V6)
+
+- [ ] RED: `[BE-0001 AC-31] 같은 회원의 PASS와 SUBSCRIPTION 행 기간이 겹치면 entitlement_kind_no_overlap 위반, 같은 종류는 겹쳐도 된다`
+- [ ] RED: `[BE-0001 AC-30] subscription_end · subscription_four_week_multiple · subscription_max_length CHECK`, `[BE-0001 AC-32] 같은 source_id · window_start 두 번째 INSERT는 entitlement_period_uidx 위반`
+- [ ] RED: `[BE-0001 AC-29] max_count 0 · 1000, used_count 범위 밖, kind와 source_id 모양이 다르면 CHECK 위반`
+- [ ] GREEN: `V6__entitlement.sql`(prd 3.1 수강권 · 월 정액 DDL 그대로: `btree_gist`, `subscription`, `entitlement`, 인덱스 · 제약). 조건을 하나씩 빼면 테스트가 실패하는 것 확인
+- [ ] REFACTOR: `EntitlementFixtures`
+
+### 4.3 횟수권 등록 `POST /instructor/members/{id}/entitlements`
+
+- [ ] RED: `[BE-0001 AC-29] PASS 11-01 ~ 12-31 · 10 → 201 카드, 1행`, `오늘 종료는 된다`, `같은 기간 두 번 → 2행`
+- [ ] RED: `[BE-0001 AC-29] startsOn > endsOn · maxCount 0 · 1000 · endsOn 어제 · kind 없음 · 모르는 kind → 400 fields, 행 없음`
+- [ ] RED: `[BE-0001 AC-31] 다른 강사 · 없는 회원 → 404, ENDED → 422 MEMBER_ENDED`
+- [ ] GREEN: `EntitlementController` · `EntitlementService`(한 트랜잭션: 4.1의 `MembershipFacade`에 더한 회원 잠금 메서드로 잠금 · 상태 → 검사 → INSERT) · `EntitlementRepository`. 요청은 `kind`로 갈리는 두 모양이라 받는 방법(하나의 record + 종류별 검사, 또는 다형 역직렬화)을 여기서 정한다
+- [ ] REFACTOR: 카드 응답 조립을 4.6과 나눠 쓸 수 있게 정리
+
+### 4.4 월 정액 등록 · 종류 겹침
+
+- [ ] RED: `[BE-0001 AC-30] WEEK 2회 · 11-05 · 8주 → 201, subscription(period_count 8, ends_on 12-30), 주기 11-12 · 11-19 두 행`, `FOUR_WEEKS 8주 → period_count 2, 28일 주기`
+- [ ] RED: `[BE-0001 AC-30] weeks 3 · 0 · 52, count 0 · 100, per MONTH, 종료일이 어제 → 400`
+- [ ] RED: `[BE-0001 AC-31] 살아 있는 횟수권이 있으면 월 정액 → OTHER_KIND_ACTIVE + availableFrom`, `월 정액의 아직 안 만든 주기와 겹치는 횟수권 → OTHER_KIND_ACTIVE`, `다른 종류가 만료됐고 기간만 겹치면 PERIOD_OVERLAP`, `만료됐고 안 겹치면 201`
+- [ ] RED: `[BE-0001 AC-31] 같은 회원에게 횟수권 · 월 정액을 동시에 → 하나만 201`, `entitlement_kind_no_overlap 위반은 422 PERIOD_OVERLAP`(처리기를 직접 부르는 테스트)
+- [ ] GREEN: 등록 트랜잭션에 월 정액 INSERT → 그 한 건의 주기 생성(수강권 쓰기 경로 1.2 · 2의 SQL). 다른 종류 검사는 쓰기 경로 1.1 · 1.2의 `active_until` · `overlaps` 한 쿼리로 하고, 월 정액은 `starts_on ~ ends_on` 전체와 비교한다
+- [ ] REFACTOR: 두 종류의 검사를 한 메서드로
+
+### 4.5 주기 생성 작업 · 오픈 범위 이벤트
+
+- [ ] RED: `[BE-0001 AC-32] 강사 2명, Clock을 하루 넘겨 전체 생성 → 두 강사 모두 새 주기`, `한 건 INSERT 실패 → 다른 건은 생기고 실패 로그`, `ApplicationReadyEvent → 주기 생성`, `두 번 돌려도 같음, period_count를 넘지 않음, ENDED 회원도 생성`
+- [ ] RED: `[BE-0001 AC-32] 오픈 범위 14 → 28이면 응답 전에 주기가 늘고, 한 건이 실패해도 open_range_days 28 · 회차 · 다른 건 주기는 저장`
+- [ ] GREEN: `PeriodGeneration`(한 건 / 강사 / 전체), `PeriodJobs`(`@Scheduled` cron · zone · 1분 여유, 앱 시작, 건별 트랜잭션, 실패는 로그), `OpenRangeListener`(이벤트의 today, 건마다 savepoint)
+- [ ] REFACTOR: cron · zone 값 테스트(시간표 작업과 같은 방식)
+
+### 4.6 카드 계산 (EntitlementFacade · CardReader)
+
+- [ ] RED: `[BE-0001 AC-33] 횟수권 ACTIVE · NOT_STARTED · EXPIRED · 잔여 0, 월 정액 ACTIVE + currentPeriod, 주기 행이 없으면 currentPeriod null`
+- [ ] RED: `[BE-0001 AC-33] 섞인 카드 순서`, `다른 강사 회원의 카드는 없다`
+- [ ] GREEN: `EntitlementFacade.cards(instructorId, memberIds)` → 회원별 정렬된 `EntitlementCardInfo` 목록. 회원 id 목록을 한 번에 받아 쿼리 수를 고정한다. 상태 · 순서는 오늘 기준으로 계산한다
+- [ ] REFACTOR: 등록 · 잔여 수정 응답이 같은 카드 계산을 쓰게
+
+### 4.7 bff에 카드 붙이기
+
+- [ ] RED: `[BE-0001 AC-34] 목록 frontCard = 맨 앞, 수강권 없음 · 만료만 → null`, `상세 cards 전부, EXPIRED 맨 뒤`, `회원 3명 목록의 카드 조회 SQL 1번`
+- [ ] GREEN: `InstructorMemberView`가 `MembershipFacade` 목록 → id 목록으로 `EntitlementFacade.cards` 한 번 → 짝짓기. 읽기 전용 · REPEATABLE READ
+- [ ] REFACTOR: 응답 record 정리
+
+### 4.8 잔여 수정 `POST /instructor/entitlements/{id}/adjust`
+
+- [ ] RED: `[BE-0001 AC-35] used 3/10에 delta 1 → remaining 8`, `delta 0 · 없음 · 1.5 → 400`, `종료일 지난 횟수권 → ENTITLEMENT_EXPIRED`, `시작 전 횟수권 → 200`
+- [ ] RED: `[BE-0001 AC-35] 월 정액 지난 · 다음 주기 → PERIOD_NOT_CURRENT, 지금 주기 → 200 월 정액 카드`, `0 · max 밖 → REMAINING_OUT_OF_RANGE`, `다른 강사 → 404`, `여러 개면 앞의 것`
+- [ ] GREEN: prd 3.2 API 5절의 조건부 UPDATE(`used_count - $delta`, 소유자 조건) → 0행이면 다시 읽어 순서대로 답한다
+- [ ] REFACTOR: 없음이면 건너뜀
+
+### 4.9 doc-sync
+
+- [ ] REFACTOR: 수강권 `POLICY.md` · `data-model.md` · `write-paths.md`(구현과 다른 곳), 회원 `POLICY.md`(수강 종료와 수강권), AC 대 제약 표(3.2.15 · 3.2.19 · 3.2.21 · 3.3.4 등 Phase 4 줄), `overview.md`, `feature.yaml`
+
+## Phase 4 끝난 뒤 확인
+
+- [ ] `./gradlew test` 전체 통과, `ModularityTests` · `ArchitectureTests` 통과
+- [ ] local에서 횟수권 · 월 정액 등록 → 회원 목록 · 상세의 카드 → 잔여 수정 → 오픈 범위 늘리기 뒤 주기를 curl로 한 번씩
 
