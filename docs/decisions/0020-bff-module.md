@@ -1,6 +1,6 @@
 ---
 id: BE-ADR-0020
-status: proposed
+status: accepted
 date: 2026-11-21
 deciders: [BE]
 source: [BE-ADR-0011, BE-ADR-0016, BE-ADR-0017, DEC-0008, DEC-0010]

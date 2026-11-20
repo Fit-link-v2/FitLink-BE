@@ -28,4 +28,4 @@ BE 내부 설계 결정. FE와 같이 따르는 결정은 [PRD 레포 `decisions
 | [BE-ADR-0017](0017-package-structure.md) | 모듈 안은 역할별 폴더로 나누고, 다른 모듈에는 루트의 Facade 하나만 연다 | accepted (결정 2 · 5의 모듈 루트 규칙에 BE-ADR-0019가 `{모듈}…Event`를 더함) |
 | [BE-ADR-0018](0018-error-handling.md) | 에러 처리는 `common`의 처리기 하나가 맡고, 모듈은 에러 코드 enum만 둔다 | accepted |
 | [BE-ADR-0019](0019-module-events.md) | 모듈 이벤트는 발행하는 모듈의 루트에 `{모듈}{무엇}Event` record로 두고, 받는 쪽은 같은 트랜잭션의 동기 리스너로 받는다 | accepted |
-| [BE-ADR-0020](0020-bff-module.md) | 여러 도메인을 모아 보여 주는 조회 API는 맨 위의 `bff` 모듈에 둔다 | proposed |
+| [BE-ADR-0020](0020-bff-module.md) | 여러 도메인을 모아 보여 주는 조회 API는 맨 위의 `bff` 모듈에 둔다 | accepted |
