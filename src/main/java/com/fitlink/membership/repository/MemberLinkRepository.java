@@ -20,4 +20,12 @@ public class MemberLinkRepository {
 			.update();
 	}
 
+
+	// 살아 있는 링크를 끊는다. 행은 지우지 않고 끊은 시각을 남긴다
+	public void revokeLive(long memberId) {
+		jdbc.sql("UPDATE member_link SET revoked_at = now() WHERE member_id = :memberId AND revoked_at IS NULL")
+			.param("memberId", memberId)
+			.update();
+	}
+
 }

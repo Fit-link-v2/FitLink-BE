@@ -59,6 +59,17 @@ public class MemberRepository {
 			.optional();
 	}
 
+	// 같은 회원의 링크 재발급을 한 줄로 세운다. 회원 키를 바꾸지 않으므로 FOR NO KEY UPDATE로 충분하고,
+	// 링크 INSERT의 외래 키 확인(KEY SHARE)과 충돌하지 않는다. 남의 회원 · 없는 회원이면 false
+	public boolean lock(long instructorId, long memberId) {
+		return jdbc.sql("SELECT 1 FROM member WHERE id = :memberId AND instructor_id = :instructorId FOR NO KEY UPDATE")
+			.param("memberId", memberId)
+			.param("instructorId", instructorId)
+			.query(Integer.class)
+			.optional()
+			.isPresent();
+	}
+
 	// 보낸 필드만 바꾼다. 빈 변경도 행이 있으면 1을 돌려준다. 0이면 남의 회원이거나 없는 회원이다
 	public int update(long instructorId, long memberId, MemberChange change) {
 		return jdbc.sql("""
