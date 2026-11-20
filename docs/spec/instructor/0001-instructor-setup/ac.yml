@@ -1,7 +1,8 @@
 # AC 계약. 테스트가 무엇을 증명해야 하는지의 원본.
 # id는 한 번 정하면 바꾸지 않는다. 삭제할 AC는 지우지 말고 status: removed
 # Phase 1(US 1 가입 · 로그인 · 세션)은 AC-1 ~ AC-10, Phase 2(US 2 시간표 · 오픈 범위 · 자정 작업)는 AC-11 ~ AC-22,
-# Phase 3(US 3 회원 · US 4 링크 · US 5 개봉 상태)은 AC-23 ~ AC-28이다.
+# Phase 3(US 3 회원 · US 4 링크 · US 5 개봉 상태)은 AC-23 ~ AC-28, Phase 4(수강권 · 카드 · 월 정액 주기)는 AC-29 ~ AC-35다.
+# 수강권 AC의 "오늘"도 테스트에서 고정한 Clock 값이다.
 # 다음 Phase는 번호를 이어 붙인다(prd.md 1절 진행 단위). 시간표 AC(AC-11 ~ AC-21)의 "지금" · "오늘"은 테스트에서 고정한 Clock 값이다.
 # 세션 만료(AC-7 · AC-22)는 DB의 now()를 쓰므로 expires_at도 DB 시각 기준으로 만든다.
 spec: docs/spec/instructor/0001-instructor-setup/prd.md
@@ -301,3 +302,74 @@ criteria:
     priority: must
     verify: machine
     status: active
+
+  - id: AC-29
+    source: [PRD-0001 AC 3.2.1, PRD-0001 AC 3.2.5, PRD-0001 AC 3.2.11, PRD-0001 AC 3.2.18, Q27, Q31]
+    description: "횟수권은 기간과 횟수로 등록한다"
+    type: behavior
+    layers: [schema, api, test]
+    assertion: "오늘 11-12에 POST /instructor/members/{id}/entitlements { kind: PASS, startsOn: 11-01, endsOn: 12-31, maxCount: 10 } → 201 { kind: PASS, id, startsOn, endsOn, maxCount: 10, remaining: 10, state: ACTIVE }, entitlement 1행(kind PASS, source_id null). startsOn > endsOn · maxCount 0 · 1000 · endsOn 11-11 · kind 없음 · kind DAILY → 400(fields), 행 없음. endsOn 11-12(오늘)는 201. 같은 기간 횟수권을 다시 등록해도 201이고 2행. DELETE /instructor/entitlements/{id} 같은 삭제 · 기간 수정 경로가 없다"
+    priority: must
+    verify: machine
+    status: active
+
+  - id: AC-30
+    source: [PRD-0001 AC 3.2.8, PRD-0001 AC 3.2.9, PRD-0001 AC 3.2.12, PRD-0001 AC 3.2.13, PRD-0001 AC 3.2.14, Q23, Q31]
+    description: "월 정액은 4주 단위로 등록하고 오픈 범위 안의 주기를 바로 만든다"
+    type: behavior
+    layers: [schema, api, test]
+    assertion: "오늘 11-12 · 오픈 범위 14일에 { kind: SUBSCRIPTION, limit: { per: WEEK, count: 2 }, startsOn: 11-05, weeks: 8 } → 201, subscription 1행(period_unit WEEK, count_per_period 2, period_count 8, ends_on 12-30). 응답 전에 entitlement 주기 행이 11-12 · 11-19 시작 2개(각 7일 · max_count 2 · source_id = 그 등록). 11-05 시작 주기는 11-11에 끝나 없고, 11-26 시작은 범위 [11-12, 11-26) 밖이라 없다. per FOUR_WEEKS · weeks 8 → period_count 2, 주기 28일. weeks 3 · 0 · 52, count 0 · 100, per MONTH, startsOn 10-01 · weeks 4(종료일 10-28이 오늘 이전) → 400, 행 없음"
+    priority: must
+    verify: machine
+    status: active
+
+  - id: AC-31
+    source: [PRD-0001 AC 3.2.10, PRD-0001 AC 3.2.15, PRD-0001 AC 3.2.17, PRD-0001 AC 3.3.4, Q24, Q28, Q34]
+    description: "수강 종료 회원, 다른 종류와 겹치는 기간, 만료되지 않은 다른 종류는 등록하지 않는다"
+    type: behavior
+    layers: [api, domain, test]
+    assertion: "다른 강사 · 없는 회원 → 404. ENDED 회원 → 422 MEMBER_ENDED, 행 없음. 횟수권 11-01 ~ 11-30이 있을 때 월 정액(startsOn 12-03, weeks 4) → 422 ENTITLEMENT_OTHER_KIND_ACTIVE, availableFrom 12-01. 만료된 횟수권(10-01 ~ 11-11)만 있고 월 정액 기간이 그와 겹치지 않으면 201. 월 정액 11-05 ~ 12-30이 있을 때 횟수권 12-20 ~ 12-31(아직 만들지 않은 주기와 겹침) → 422 ENTITLEMENT_OTHER_KIND_ACTIVE, availableFrom 12-31. 다른 종류가 이미 만료됐고 기간만 겹치면 ENTITLEMENT_PERIOD_OVERLAP(만료되지 않은 다른 종류가 있으면 겹침과 상관없이 OTHER_KIND_ACTIVE가 먼저). 같은 회원에게 횟수권 · 월 정액을 동시에 보내면 하나만 201이고 다른 하나는 422(회원 행 잠금). 앞선 검사를 지나 entitlement_kind_no_overlap에 걸리면 422 ENTITLEMENT_PERIOD_OVERLAP"
+    priority: must
+    verify: machine
+    status: active
+
+  - id: AC-32
+    source: [PRD-0001 AC 3.2.8, PRD-0001 AC 3.2.9, PRD-0001 AC 3.3.4, Q19]
+    description: "월 정액 주기는 매일 자정 · 앱 시작 · 오픈 범위를 늘릴 때 채운다"
+    type: integration
+    layers: [domain, test]
+    assertion: "강사 2명의 월 정액이 있을 때 Clock을 하루 넘겨 전체 주기 생성을 돌리면 새로 범위에 들어온 주기가 두 강사 모두 생긴다. 한 월 정액의 INSERT가 실패하도록 만들어도 다른 월 정액의 주기는 생기고 실패 로그가 남는다. ApplicationReadyEvent를 발행하면 주기가 생긴다. 작업은 cron 0 0 0 * * *, zone Asia/Seoul. 오픈 범위를 14 → 28로 늘리면 응답 전에 늘어난 범위의 주기가 생기고, 한 월 정액의 생성이 실패해도 open_range_days는 28이고 회차와 다른 월 정액 주기는 생긴다. 두 번 돌려도 행 수가 같고 period_count를 넘는 주기는 없다. ENDED 회원의 월 정액도 주기가 생긴다"
+    priority: must
+    verify: machine
+    status: active
+
+  - id: AC-33
+    source: [PRD-0001 AC 3.2.4, PRD-0001 AC 3.2.15, PRD-0001 AC 3.2.19, PRD-0001 AC 3.2.20, PRD-0002 AC 2.1.5, PRD-0002 AC 2.1.6, PRD-0002 AC 2.1.7, PRD-0002 AC 2.1.8, PRD-0002 AC 2.1.9, PRD-0003 AC 1.3.5, Q34]
+    description: "수강권 카드는 상태 · 남은 횟수 · 지금 주기를 계산해 다음에 차감될 순서로 준다"
+    type: behavior
+    layers: [domain, test]
+    assertion: "오늘 11-12. 횟수권 11-01 ~ 11-30(used 3/10) → ACTIVE remaining 7. 11-20 시작 → NOT_STARTED. 10-01 ~ 11-11 → EXPIRED. 11-12 종료 · used 10/10 → ACTIVE remaining 0. 월 정액 11-05 ~ 12-30 → ACTIVE, currentPeriod는 11-12 ~ 11-18 주기 { entitlementId, maxCount 2, remaining }. 오늘을 덮는 주기 행이 없으면 currentPeriod null. 섞여 있으면 순서: ACTIVE 잔여≥1(끝 날짜 이른 순, 월 정액은 currentPeriod.endsOn) → ACTIVE 잔여 0(currentPeriod 없는 월 정액 포함) → NOT_STARTED(시작일 이른 순) → EXPIRED(종료일 늦은 순). 기준 날짜가 같으면 횟수권 먼저, 같은 종류는 id 순"
+    priority: must
+    verify: machine
+    status: active
+
+  - id: AC-34
+    source: [PRD-0001 AC 3.2.4, PRD-0001 AC 3.2.20, PRD-0001 AC 5.1.6, PRD-0002 AC 2.1.8, PRD-0002 AC 2.1.9, BE-ADR-0020]
+    description: "회원 목록은 맨 앞 카드, 회원 상세는 카드 전부를 준다"
+    type: integration
+    layers: [api, test]
+    assertion: "GET /instructor/members의 각 줄 frontCard = AC-33 순서 맨 앞 카드. 수강권 없음 · 만료만 있음 → frontCard null. GET /instructor/members/{id}의 cards = 카드 전부, EXPIRED는 맨 뒤. 다른 강사의 수강권은 어디에도 없다. 회원 3명의 목록에서 카드 조회 SQL이 한 번 실행된다(카드 SQL의 식별 주석이 JDBC DEBUG 로그에 한 번 나온다). AC-25 · AC-26 테스트가 bff로 옮긴 뒤에도 통과하고, bff 밖의 코드는 bff에 의존하지 않는다(ArchitectureTests)"
+    priority: must
+    verify: machine
+    status: active
+
+  - id: AC-35
+    source: [PRD-0001 AC 3.2.19, PRD-0001 AC 3.2.21, PRD-0003 AC 5.2.3, PRD-0003 AC 5.2.4, Q27]
+    description: "잔여 수정은 바꿀 양을 보내고, 끝난 횟수권 · 지금이 아닌 주기는 고치지 않는다"
+    type: behavior
+    layers: [api, test]
+    assertion: "횟수권(used 3/10) POST /instructor/entitlements/{id}/adjust { delta: 1 } → 200 card remaining 8(used 2). delta 0 · 없음 · 1.5 → 400. 종료일 지난 횟수권 → 422 ENTITLEMENT_EXPIRED. 시작 전 횟수권 → 200. 월 정액의 지난 주기 · 다음 주기 entitlementId → 422 PERIOD_NOT_CURRENT, 지금 주기 → 200이고 응답은 월 정액 카드. used 0에서 delta 1 · used max에서 delta -1 → 422 REMAINING_OUT_OF_RANGE. 다른 강사 · 없는 id → 404. 판정 순서는 400 → 404 → ENTITLEMENT_EXPIRED → PERIOD_NOT_CURRENT → REMAINING_OUT_OF_RANGE이고 둘 이상 해당하면 앞 것. UPDATE는 used_count - delta를 조건부로 해서 그 사이 바뀐 used_count를 덮어쓰지 않는다"
+    priority: must
+    verify: machine
+    status: active
+

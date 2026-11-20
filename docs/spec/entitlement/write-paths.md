@@ -24,11 +24,13 @@ SELECT status FROM member WHERE id = $member_id AND instructor_id = $me FOR NO K
 ### 1.1 횟수권
 
 ```sql
--- 월 정액 등록 기간 전체와 겹치는지 본다. 아직 만들어지지 않은 주기까지 포함한다 (PRD 1 AC 3.2.10)
-SELECT 1 FROM subscription
- WHERE member_id = $member_id
-   AND daterange(starts_on, ends_on, '[]') && daterange($window_start, $window_end, '[]');
--- 1행이라도 있으면 거부. 롤백
+-- 다른 종류(월 정액)를 등록 기간 전체로 본다. 아직 만들어지지 않은 주기까지 포함한다
+SELECT max(ends_on) FILTER (WHERE ends_on >= $today)                                         AS active_until,
+       coalesce(bool_or(daterange(starts_on, ends_on, '[]') && daterange($window_start, $window_end, '[]')), false) AS overlaps
+  FROM subscription
+ WHERE member_id = $member_id;
+-- active_until이 있으면 만료되지 않은 다른 종류가 있다: ENTITLEMENT_OTHER_KIND_ACTIVE, availableFrom = active_until + 1일 (PRD 1 AC 3.2.15)
+-- 아니고 overlaps면 다른 종류와 기간이 겹친다: ENTITLEMENT_PERIOD_OVERLAP (PRD 1 AC 3.2.10). 어느 쪽이든 롤백
 
 INSERT INTO entitlement (member_id, kind, window_start, window_end, max_count)
 VALUES ($member_id, 'PASS', $window_start, $window_end, $max_count);
@@ -36,16 +38,16 @@ VALUES ($member_id, 'PASS', $window_start, $window_end, $max_count);
 COMMIT;
 ```
 
-같은 종류(횟수권)끼리는 검사하지 않는다. 겹쳐도 된다(AC 3.2.11).
+같은 종류(횟수권)끼리는 검사하지 않는다. 겹쳐도 된다(AC 3.2.11). 만료는 종료일이 오늘 이전인 것이고, 종료일 당일 · 잔여 0 · 시작 전은 만료가 아니다. 만료되지 않은 다른 종류가 있으면 기간이 겹치든 아니든 OTHER_KIND_ACTIVE가 먼저다.
 
 ### 1.2 월 정액
 
 ```sql
--- 이미 있는 횟수권과 겹치는지 본다
-SELECT 1 FROM entitlement
- WHERE member_id = $member_id AND kind = 'PASS'
-   AND daterange(window_start, window_end, '[]') && daterange($starts_on, $ends_on, '[]');
--- 1행이라도 있으면 거부. 롤백
+-- 다른 종류(횟수권)를 본다. 판정은 1.1과 같다
+SELECT max(window_end) FILTER (WHERE window_end >= $today)                                    AS active_until,
+       coalesce(bool_or(daterange(window_start, window_end, '[]') && daterange($starts_on, $ends_on, '[]')), false) AS overlaps
+  FROM entitlement
+ WHERE member_id = $member_id AND kind = 'PASS';
 
 INSERT INTO subscription (member_id, period_unit, count_per_period, starts_on, period_count, ends_on)
 VALUES ($member_id, $period_unit, $count_per_period, $starts_on, $period_count, $ends_on)

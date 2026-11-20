@@ -23,11 +23,11 @@
 | 1 | US 1 가입 · 로그인 · 세션 | AC-1 ~ AC-10 | 이 문서에서 확정 |
 | 2 | US 2 시간표 · 오픈 범위, 매일 자정 작업(회차 채우기 · 만료 세션 삭제) | AC-11 ~ AC-22 | 이 문서에서 확정 |
 | 3 | US 3 회원(AC 3.1 · 3.3) · US 4 링크 · US 5 개봉 상태 | AC-23 ~ AC-28 | 이 문서에서 확정 |
-| 4 | US 3 수강권(AC 3.2) · 회원 목록 · 상세의 수강권 카드 · 월 정액 주기 생성 | 추가 예정 | 3절 설계. AC 작성 전 |
+| 4 | US 3 수강권(AC 3.2 · 3.3.4) · 회원 목록 · 상세의 수강권 카드 · 월 정액 주기 생성 | AC-29 ~ AC-35 | 이 문서에서 확정 |
 
-baseline 동결은 Phase 단위로 한다. Phase 1의 AC-1 ~ AC-10은 plan 승인 뒤 바꾸지 않는다. Phase 2 이후 AC는 번호를 이어서 더하고 그때 다시 baseline을 커밋한다. Phase 2는 AC-11 ~ AC-22, Phase 3은 AC-23 ~ AC-28이다.
+baseline 동결은 Phase 단위로 한다. Phase 1의 AC-1 ~ AC-10은 plan 승인 뒤 바꾸지 않는다. Phase 2 이후 AC는 번호를 이어서 더하고 그때 다시 baseline을 커밋한다. Phase 2는 AC-11 ~ AC-22, Phase 3은 AC-23 ~ AC-28, Phase 4는 AC-29 ~ AC-35다.
 
-회원 · 링크(Phase 3)와 수강권(Phase 4)을 나눈 이유는 모듈이다. Phase 3은 `membership` 모듈만 쓰고, 수강권 카드를 회원 응답에 붙이는 방법(`membership`이 `entitlement`를 부를 수 없다)은 Phase 4 plan에서 정한다.
+회원 · 링크(Phase 3)와 수강권(Phase 4)을 나눈 이유는 모듈이다. Phase 3은 `membership` 모듈만 쓴다. 수강권 카드를 회원 응답에 붙이려면 `membership`이 `entitlement`를 불러야 하는데 의존이 순환한다. 그래서 회원 목록 · 상세 GET은 Phase 4에서 `bff` 모듈로 옮기고, `bff`가 두 모듈의 Facade를 불러 합친다([BE-ADR-0020](../../../decisions/0020-bff-module.md)).
 
 ```mermaid
 flowchart LR
@@ -316,6 +316,86 @@ flowchart LR
     P["이름 · 메모 수정 · 수강 종료 · 다시 활성화<br/>(AC-27)"] --> DB
     O["회원 화면에서 링크 열기<br/>(기능 0002)"] -.->|"first_opened_at"| DB
     DB --> L["회원 목록 · 상세<br/>(AC-25 · AC-26)"]
+```
+
+### Phase 4. 수강권 · 카드 · 월 정액 주기
+
+근거는 PRD-0001 US 3(AC 3.2 · 3.3.4), PRD-0002 AC 2.1(카드 표시), PRD-0003 AC 1.3.5 · 5.2(차감 순서 · 잔여 수정)와 이 문서의 열린 질문 해소 결과다. "오늘"은 서울 기준이고 애플리케이션 `Clock`에서 읽는다. 오픈 범위는 `[오늘, 오늘 + N일)`이다. 다른 강사의 회원 · 수강권은 목록에 넣지 않고, 다른 강사의 `{id}`는 없는 id와 같은 404다. 잔여 수정의 이력(PRD-0003 AC 5.2.2, `entitlement_adjustment`)은 기능 0003에서 붙는다.
+
+회원 목록 · 상세 GET은 `bff` 모듈로 옮긴다(BE-ADR-0020). 옮긴 뒤에도 AC-25 · AC-26은 그대로 지킨다.
+
+### AC-29. 횟수권은 기간과 횟수로 등록한다
+
+근거: PRD-0001 AC 3.2.1 · 3.2.5 · 3.2.11 · 3.2.18, Q27 · Q31
+
+- [ ] `POST /instructor/members/{id}/entitlements` `{ kind: "PASS", startsOn, endsOn, maxCount }`는 `entitlement` 1행을 만들고 201 `EntitlementCard`를 준다
+- [ ] `startsOn <= endsOn`, `maxCount` 1 ~ 999, `endsOn`이 오늘 이전이면 400이고 저장하지 않는다. 시작일이 지난 것은 받는다. `kind`가 없거나 `PASS` · `SUBSCRIPTION`이 아니면 400
+- [ ] 같은 회원에게 기간이 겹치는 횟수권을 또 등록할 수 있다
+- [ ] 등록한 수강권을 지우거나 기간을 고치거나 중도 종료하는 API는 없다(PRD-0001 AC 3.2.18)
+
+### AC-30. 월 정액은 4주 단위로 등록하고 오픈 범위 안의 주기를 바로 만든다
+
+근거: PRD-0001 AC 3.2.8 · 3.2.9 · 3.2.12 ~ 3.2.14, Q23 · Q31
+
+- [ ] `{ kind: "SUBSCRIPTION", limit: { per, count }, startsOn, weeks }`는 `subscription` 1행을 만들고 201 `EntitlementCard`를 준다. `per`는 `WEEK`(7일 주기) · `FOUR_WEEKS`(28일 주기), `count` 1 ~ 99, `weeks`는 4의 배수 4 ~ 48이다. 어기거나 종료일(`startsOn + 7 × weeks − 1일`)이 오늘 이전이면 400
+- [ ] 같은 트랜잭션에서 오늘부터 오픈 범위 끝까지에 걸치는 주기의 `entitlement` 행을 만든다. 이미 끝난 주기와 등록 기간 밖의 주기는 만들지 않는다
+- [ ] 주기 수는 서버가 계산한다(`WEEK`면 `weeks`, `FOUR_WEEKS`면 `weeks / 4`). 요청은 종료일 · 주기 수를 받지 않는다
+
+### AC-31. 수강 종료 회원, 다른 종류와 겹치는 기간, 만료되지 않은 다른 종류는 등록하지 않는다
+
+근거: PRD-0001 AC 3.2.10 · 3.2.15 · 3.2.17 · 3.3.4, Q24 · Q28 · Q34
+
+- [ ] 판정 순서: 400 → 404 → ENDED면 422 MEMBER_ENDED → 만료되지 않은 다른 종류가 있으면(기간이 겹치든 아니든) 422 ENTITLEMENT_OTHER_KIND_ACTIVE와 `availableFrom`(그 수강권들 중 가장 늦은 종료일의 다음 날) → 아니고 다른 종류와 기간만 겹치면 422 ENTITLEMENT_PERIOD_OVERLAP
+- [ ] 월 정액의 기간은 아직 만들지 않은 주기까지 포함한 등록 전체(`startsOn ~ endsOn`)로 본다. 만료는 종료일이 지난 것이고, 종료일 당일 · 잔여 0 · 시작 전은 만료가 아니다
+- [ ] 같은 회원에게 다른 종류의 등록 두 개가 동시에 와도 하나만 저장된다. 늦은 쪽은 422다
+
+### AC-32. 월 정액 주기는 매일 자정 · 앱 시작 · 오픈 범위를 늘릴 때 채운다
+
+근거: PRD-0001 AC 3.2.8 · 3.2.9 · 3.3.4, Q19
+
+- [ ] 매일 0시(서울)와 앱이 시작될 때 모든 월 정액의 주기를 오픈 범위 끝까지 만든다. 월 정액마다 따로 트랜잭션이라 한 건이 실패해도 나머지는 만들어진다. 실패한 건은 로그를 남긴다
+- [ ] 오픈 범위를 늘리면 같은 요청에서 그 강사의 월 정액 주기를 늘어난 범위까지 만든다. 한 건이 실패해도 그 건만 되돌리고 오픈 범위 변경과 회차 생성은 저장된다
+- [ ] 여러 번 돌아도 같은 주기가 두 번 생기지 않는다. 마지막 주기 뒤로는 만들지 않는다. 수강 종료(ENDED) 회원의 월 정액 주기도 계속 만든다
+
+### AC-33. 수강권 카드는 상태 · 남은 횟수 · 지금 주기를 계산해 다음에 차감될 순서로 준다
+
+근거: PRD-0001 AC 3.2.4 · 3.2.15 · 3.2.19 · 3.2.20, PRD-0002 AC 2.1.5 ~ 2.1.9, PRD-0003 AC 1.3.5, Q34
+
+- [ ] 횟수권 카드는 `{ kind: "PASS", id, startsOn, endsOn, maxCount, remaining, state }`, 월 정액 카드는 `{ kind: "SUBSCRIPTION", id, limit, startsOn, endsOn, state, currentPeriod }`다. `remaining = max_count − used_count`
+- [ ] `state`는 시작일이 오늘 이후면 NOT_STARTED, 종료일이 오늘 이전이면 EXPIRED, 나머지는 ACTIVE다. 월 정액은 등록 전체로 판단하고 잔여 0은 만료가 아니다
+- [ ] `currentPeriod`는 그 월 정액에서 오늘을 덮는 주기 `{ entitlementId, startsOn, endsOn, maxCount, remaining }`이고, 없으면 `null`이다
+- [ ] 순서는 ACTIVE이고 잔여 1 이상(끝 날짜 이른 순. 횟수권은 `endsOn`, 월 정액은 `currentPeriod.endsOn`) → ACTIVE 잔여 0 → NOT_STARTED(시작일 이른 순) → EXPIRED(종료일 늦은 순)다. `currentPeriod`가 없는 ACTIVE 월 정액은 차감할 수 없으므로 잔여 0 묶음이다. 기준 날짜가 같으면 횟수권이 먼저, 같은 종류끼리는 `id` 순이다
+
+### AC-34. 회원 목록은 맨 앞 카드, 회원 상세는 카드 전부를 준다
+
+근거: PRD-0001 AC 3.2.4 · 3.2.20 · 5.1.6, PRD-0002 AC 2.1.8 · 2.1.9, BE-ADR-0020
+
+- [ ] `GET /instructor/members`의 줄마다 `frontCard`는 AC-33 순서의 맨 앞 카드다. 수강권이 없거나 만료된 것만 있으면 `null`이다
+- [ ] `GET /instructor/members/{id}`의 `cards`는 AC-33 순서의 카드 전부이고, 만료된 수강권도 맨 뒤에 들어 있다
+- [ ] 회원이 몇 명이든 목록의 카드는 쿼리 한 번으로 읽는다(회원과 카드를 같은 시점으로 읽도록 읽기 전용 트랜잭션 하나로 묶는다)
+
+### AC-35. 잔여 수정은 바꿀 양을 보내고, 끝난 횟수권 · 지금이 아닌 주기는 고치지 않는다
+
+근거: PRD-0001 AC 3.2.19 · 3.2.21, PRD-0003 AC 5.2.3 · 5.2.4, Q27
+
+- [ ] `POST /instructor/entitlements/{id}/adjust` `{ delta }`는 남은 횟수를 `delta`만큼 바꾸고(`used_count − delta`) 200 `EntitlementCard`를 준다. `{id}`는 횟수권은 카드 `id`, 월 정액은 `currentPeriod.entitlementId`다
+- [ ] `delta`가 없거나 0이거나 정수가 아니면 400. 판정 순서: 404 → 종료일이 지난 횟수권이면 422 ENTITLEMENT_EXPIRED → 오늘을 덮지 않는 월 정액 주기면 422 PERIOD_NOT_CURRENT → 남은 횟수가 0 ~ `max_count` 밖이 되면 422 REMAINING_OUT_OF_RANGE. 시작 전 횟수권은 고칠 수 있다
+- [ ] 다른 요청이 그 사이 `used_count`를 바꿔도 덮어쓰지 않는다(조건부 UPDATE로 상대 변경)
+
+### Phase 4 흐름
+
+```mermaid
+flowchart LR
+    R["수강권 등록<br/>(AC-29 · AC-30 · AC-31)"] -->|"MembershipFacade<br/>회원 잠금 · 상태"| M[("member")]
+    R --> E[("entitlement · subscription")]
+    R -->|"월 정액"| G["주기 생성<br/>(AC-30 · AC-32)"]
+    J["매일 0시 · 앱 시작"] --> G
+    O["오픈 범위 늘리기"] -->|"InstructorOpenRangeExtendedEvent"| G
+    G --> E
+    A["잔여 수정<br/>(AC-35)"] --> E
+    E --> C["카드 계산<br/>(AC-33)"]
+    C -->|"EntitlementFacade"| B["bff 회원 목록 · 상세<br/>(AC-34)"]
+    M -->|"MembershipFacade"| B
 ```
 
 ## 3. 기술 설계
@@ -650,7 +730,7 @@ ON CONFLICT DO NOTHING;                                                         
 - 매일 배치는 Spring `@Scheduled(cron = "0 0 0 * * *", zone = "Asia/Seoul")`로 앱 안에서 돈다. 회원 화면도 같은 `[오늘, 오늘 + N일)`을 쓰므로, 자정보다 늦게 돌면 그 사이 범위 끝 하루가 빈 날로 보인다
 - 서버가 1대([BE-ADR-0015](../../../decisions/0015-hosting-lightsail.md))라 중복 실행을 막는 잠금은 두지 않는다. 두 번 돌아도 결과가 같다(AC 2.2.2)
 - 배치는 매번 오픈 범위 전체를 다시 본다. 빠진 날을 따로 기억하지 않아도 하루 실패한 뒤 다음 실행이 채운다
-- 자정 · 앱 시작 실행은 슬롯을 만든 뒤 월 정액 주기 생성([수강권 쓰기 경로](../../entitlement/write-paths.md) 2)을 이어서 돈다. 둘 다 같은 `$today`를 쓴다. 슬롯만 생기고 수강권 주기가 없으면 새로 열린 날짜를 예약할 때 NO_REMAINING이 된다
+- 자정 · 앱 시작 때 월 정액 주기 생성([수강권 쓰기 경로](../../entitlement/write-paths.md) 2)도 돈다. `entitlement`의 자기 작업이고, 슬롯 작업과 같은 방법(1분 뒤 시각의 날짜)으로 오늘을 구해 같은 날짜를 쓴다. 서로 다른 테이블에 쓰므로 순서는 맞추지 않는다. 슬롯만 생기고 수강권 주기가 없으면 새로 열린 날짜를 예약할 때 NO_REMAINING이 된다
 - **모듈 방향.** `setting`은 `instructor` 모듈, 슬롯 생성은 `schedule` 모듈이다. `instructor`가 `schedule`을 부르면 의존 방향(`schedule → instructor`)이 뒤집혀 순환이 된다. 그래서 오픈 범위를 늘리는 `instructor`의 서비스는 `setting`을 UPDATE한 뒤 이벤트(`InstructorOpenRangeExtendedEvent(instructorId, today, now)`)만 발행하고, `schedule`이 그 이벤트를 받아 슬롯을 만든다. 같은 트랜잭션에서 즉시 채워야 하므로(AC 2.4.2) 동기 `@EventListener`로 받는다. 슬롯 생성이 실패하면 오픈 범위 변경도 롤백된다
 - 월 정액 주기도 같은 이벤트를 `entitlement`가 받아 그 강사의 회원들에 대해 같은 트랜잭션에서 만든다([수강권 쓰기 경로](../../entitlement/write-paths.md) 2). 슬롯만 늘고 주기가 없으면 다음 자정까지 늘어난 날짜의 수업이 보이는데 예약하면 NO_REMAINING이다. 두 리스너가 요청과 같은 `$today` · `$now`를 쓰도록 이벤트에 둘 다 싣는다. 리스너가 `Clock`을 다시 읽지 않는다. 두 리스너는 서로 다른 테이블에 쓰므로 순서는 상관없다. 주기 생성은 월 정액마다 savepoint(트랜잭션 안에서 그 지점까지만 되돌리는 표시)를 두어, 한 건이 실패해도 오픈 범위 변경은 커밋된다
 
@@ -913,9 +993,9 @@ ALTER TABLE entitlement ADD CONSTRAINT entitlement_kind_no_overlap
 | 메서드 | 경로 | 요청 | 응답 | 에러 |
 |---|---|---|---|---|
 | GET | `/instructor/members` | | 200 `{ "unopenedCount": 2, "items": [MemberSummary] }` | |
-| POST | `/instructor/members` | `{ "name": "김OO", "memo": "목요반" }` | 201 `{ "member": MemberDetail, "linkUrl": "https://app.{도메인}/m/{token}" }` | 400 |
+| POST | `/instructor/members` | `{ "name": "김OO", "memo": "목요반" }` | 201 `{ "member": Member, "linkUrl": "https://app.{도메인}/m/{token}" }` | 400 |
 | GET | `/instructor/members/{id}` | | 200 `MemberDetail` | 400, 404 |
-| PATCH | `/instructor/members/{id}` | `{ "name": "김OO", "memo": "화요반", "status": "ENDED" }` 중 바꿀 필드만 | 200 `MemberDetail` | 400, 404 |
+| PATCH | `/instructor/members/{id}` | `{ "name": "김OO", "memo": "화요반", "status": "ENDED" }` 중 바꿀 필드만 | 200 `Member` | 400, 404 |
 | POST | `/instructor/members/{id}/link` | | 201 `{ "linkUrl": "..." }` | 400, 404 |
 
 ```jsonc
@@ -925,9 +1005,11 @@ ALTER TABLE entitlement ADD CONSTRAINT entitlement_kind_no_overlap
 // MemberDetail
 { "id": 7, "name": "김OO", "memo": "목요반", "status": "ACTIVE", "linkOpened": true,
   "cards": [EntitlementCard] }
+// Member (쓰기 응답. 회원 정보만, 카드 없음)
+{ "id": 7, "name": "김OO", "memo": "목요반", "status": "ACTIVE", "linkOpened": true }
 ```
 
-- 회원 추가: `name` 필수(앞뒤 공백 제거 후 1 ~ 50자), `memo` 선택(500자 이하, 빈 문자열은 null로 저장)(AC 3.1.1), 동명이인 허용(AC 3.1.2). 저장하면서 링크를 발급한다(AC 3.1.3). 회원 응답의 `frontCard` · `cards`는 Phase 4에서 더한다
+- 회원 추가: `name` 필수(앞뒤 공백 제거 후 1 ~ 50자), `memo` 선택(500자 이하, 빈 문자열은 null로 저장)(AC 3.1.1), 동명이인 허용(AC 3.1.2). 저장하면서 링크를 발급한다(AC 3.1.3). 회원 응답의 `frontCard` · `cards`는 Phase 4에서 더한다. 이 절의 GET 두 개(목록 · 상세)는 회원과 수강권 카드를 모으므로 Phase 4부터 `bff` 모듈에 있고, POST · PATCH는 `membership`에 있다(BE-ADR-0020). 쓰기 응답은 카드 없는 `Member`다. `membership`은 수강권을 모르기 때문이다. 카드가 필요하면 FE가 상세를 다시 읽는다. Phase 3 AC(AC-23 · AC-27)가 쓰기 응답을 `MemberDetail`이라 부른 것은 카드를 붙이기 전의 이름이고, 모양은 이 `Member`와 같다
 - `linkUrl`은 발급 응답에만 있다(AC 4.1.2). 응답에 `Cache-Control: no-store`(컨트롤러가 직접 붙인다), 본문은 로그에 남기지 않는다(AC 4.4.1). 문구 조립과 복사는 FE(AC 4.2.2)
 - 회원 목록: `unopenedCount`는 링크를 열지 않은 ACTIVE 회원 수(AC 5.1.1). `linkOpened`는 살아 있는 링크의 `first_opened_at` 유무(AC 5.1.3 · 5.1.5). 줄의 남은 횟수는 `frontCard`의 큰 글씨다(DEC-0010). 정렬은 미개봉 ACTIVE → 나머지 ACTIVE → ENDED, 묶음 안은 이름순(같은 이름은 `id` 순). ENDED는 미개봉이어도 마지막 묶음이다(AC 5.1.1이 미개봉 수에서 ENDED를 빼는 것과 맞춘다)
 - 회원 수정: 보낸 필드만 바꾼다. 빠진 필드는 그대로, `memo: null` · `""`은 메모 삭제, `name: null`은 400. 검사는 회원 추가와 같다. 수강 종료 · 다시 활성화는 `status`(AC 3.3.1 · 3.3.3)
@@ -1064,7 +1146,7 @@ Phase 단위로 나눠 만든다. 번호는 Flyway 파일 이름 `V{번호}__{�
 | 3 | `recurrence`, `class_slot` | Phase 2. `schedule` 모듈 |
 | 4 | `auth_session (expires_at)` 인덱스 | Phase 2. 만료 세션 삭제(AC-22)용. `auth` 모듈 파일 |
 | 5 | `member`, `member_link` | Phase 3. `membership` 모듈 |
-| 6 ~ | `btree_gist` 확장, `subscription`, `entitlement` | Phase 4. 단위는 그 Phase의 plan에서 정한다 |
+| 6 | `btree_gist` 확장, `subscription`, `entitlement` | Phase 4. `entitlement` 모듈 |
 
 `cancel_deadline_hours`는 기능 0005의 마이그레이션에서 붙는다. 1차 배포에는 PRD 1 ~ 3이 함께 나간다.
 

@@ -3,7 +3,7 @@
 FitLink 백엔드 개발 레포. 개인 강사의 그룹 수업 예약 서비스의 서버 코드와 설계 문서를 함께 둔다.
 
 - 스택: Java 25 · Spring Boot 4.1 · Spring Modulith, PostgreSQL 17 ([아키텍처 개요](docs/architecture/overview.md))
-- 상태: 기능 0001 강사 세팅 구현 중(Phase 1 로그인 · Phase 2 시간표 완료, Phase 3 회원 · 링크 마무리 중, 다음은 Phase 4 수강권)
+- 상태: 기능 0001 강사 세팅 구현 중(Phase 1 로그인 · Phase 2 시간표 완료, Phase 3 회원 · 링크 완료, 다음은 Phase 4 수강권)
 
 ## 구조
 
