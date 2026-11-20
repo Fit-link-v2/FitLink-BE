@@ -1,5 +1,6 @@
 package com.fitlink.entitlement;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -203,6 +204,37 @@ class EntitlementSchemaTests extends IntegrationTest {
 			.hasMessageContaining("entitlement_kind_check");
 	}
 
+	@Test
+	void 사용_횟수를_넣지_않으면_0이다() {
+		long id = given.passWithoutUsedCount(memberId, "2026-11-01", "2026-11-30", 10);
+
+		assertThat(jdbc.sql("SELECT used_count FROM entitlement WHERE id = :id").param("id", id).query(Integer.class)
+			.single()).isZero();
+	}
+
+	// 외래 키
+
+	@Test
+	void 없는_월_정액을_가리키면_entitlement_source_id_fkey_위반() {
+		assertThatThrownBy(() -> given.period(999_999L, memberId, "2026-11-12", "2026-11-18", 2))
+			.isInstanceOf(DataIntegrityViolationException.class)
+			.hasMessageContaining("entitlement_source_id_fkey");
+	}
+
+	@Test
+	void 없는_회원의_수강권은_entitlement_member_id_fkey_위반() {
+		assertThatThrownBy(() -> given.pass(999_999L, "2026-11-01", "2026-11-30", 10))
+			.isInstanceOf(DataIntegrityViolationException.class)
+			.hasMessageContaining("entitlement_member_id_fkey");
+	}
+
+	@Test
+	void 없는_회원의_월_정액은_subscription_member_id_fkey_위반() {
+		assertThatThrownBy(() -> given.subscription(999_999L, "WEEK", 2, "2026-11-05", 8))
+			.isInstanceOf(DataIntegrityViolationException.class)
+			.hasMessageContaining("subscription_member_id_fkey");
+	}
+
 	// 월 정액 등록 CHECK
 
 	@ParameterizedTest(name = "주기당 {0}회")
@@ -220,7 +252,8 @@ class EntitlementSchemaTests extends IntegrationTest {
 			.doesNotThrowAnyException();
 	}
 
-	// 종료일을 규칙대로 맞춰(시작일 − 1일) 주기 수 조건만 어긋나게 한다
+	// 종료일은 규칙대로(시작일 − 1일) 맞췄지만 시작일 <= 종료일 조건도 함께 어긴다.
+	// PostgreSQL은 CHECK를 제약 이름 순으로 검사하므로 subscription_period_count_check가 먼저 보고된다
 	@Test
 	void 주기_수가_0이면_subscription_period_count_CHECK_위반() {
 		assertThatThrownBy(() -> given.subscription(memberId, "FOUR_WEEKS", 2, "2026-11-05", 0))

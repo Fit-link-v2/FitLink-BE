@@ -47,6 +47,20 @@ public final class EntitlementFixtures {
 		return entitlement(memberId, "SUBSCRIPTION", windowStart, windowEnd, maxCount, 0, subscriptionId);
 	}
 
+	// used_count를 넣지 않는다. 컬럼 기본값을 확인하는 테스트가 쓴다
+	public long passWithoutUsedCount(long memberId, String windowStart, String windowEnd, int maxCount) {
+		return jdbc.sql("""
+				INSERT INTO entitlement (member_id, kind, window_start, window_end, max_count)
+				VALUES (:memberId, 'PASS', CAST(:windowStart AS date), CAST(:windowEnd AS date), :maxCount)
+				RETURNING id""")
+			.param("memberId", memberId)
+			.param("windowStart", windowStart)
+			.param("windowEnd", windowEnd)
+			.param("maxCount", maxCount)
+			.query(Long.class)
+			.single();
+	}
+
 	// 모든 컬럼을 직접 정한다. 제약을 일부러 어기는 테스트가 쓴다
 	public long entitlement(long memberId, String kind, String windowStart, String windowEnd, int maxCount,
 			int usedCount, Long sourceId) {
