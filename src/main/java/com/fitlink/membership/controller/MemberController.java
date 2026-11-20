@@ -1,5 +1,6 @@
 package com.fitlink.membership.controller;
 
+import com.fitlink.membership.dto.LinkIssuedResponse;
 import com.fitlink.membership.dto.MemberAddRequest;
 import com.fitlink.membership.dto.MemberAddedResponse;
 import com.fitlink.membership.dto.MemberChangeRequest;
@@ -58,6 +59,15 @@ class MemberController {
 	MemberDetailResponse change(@AuthenticationPrincipal Long instructorId, @PathVariable long id,
 			@RequestBody JsonNode body) {
 		return MemberDetailResponse.of(members.change(instructorId, id, MemberChangeRequest.from(body)));
+	}
+
+
+	// 회원 추가와 같이 링크 원본이 실린 응답이라 캐시에 남기지 않는다
+	@PostMapping("/{id}/link")
+	ResponseEntity<LinkIssuedResponse> reissue(@AuthenticationPrincipal Long instructorId, @PathVariable long id) {
+		return ResponseEntity.status(HttpStatus.CREATED)
+			.cacheControl(CacheControl.noStore())
+			.body(new LinkIssuedResponse(members.reissue(instructorId, id).url()));
 	}
 
 }

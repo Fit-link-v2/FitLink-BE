@@ -34,10 +34,24 @@ public class MemberService {
 	@Transactional
 	public AddedMember add(long instructorId, String name, String memo) {
 		long memberId = members.insert(instructorId, name, memo);
+		return new AddedMember(new Member(memberId, name, memo, MemberStatus.ACTIVE, false), issue(memberId));
+	}
+
+	// 이전 링크를 끊고 새 링크를 만든다. 수강 종료(ENDED) 회원도 된다. 유출된 링크를 끊는 수단이라
+	// 다시 활성화하지 않고 바로 할 수 있어야 한다. 회원 행을 먼저 잠가 같은 회원의 재발급이 동시에 와도 차례로 돈다
+	@Transactional
+	public IssuedLink reissue(long instructorId, long memberId) {
+		if (!members.lock(instructorId, memberId)) {
+			throw notFound();
+		}
+		links.revokeLive(memberId);
+		return issue(memberId);
+	}
+
+	private IssuedLink issue(long memberId) {
 		LinkToken token = LinkToken.generate();
 		links.insert(memberId, token.hash());
-		return new AddedMember(new Member(memberId, name, memo, MemberStatus.ACTIVE, false),
-				new IssuedLink(properties.linkBaseUrl() + "/m/" + token.raw()));
+		return new IssuedLink(properties.linkBaseUrl() + "/m/" + token.raw());
 	}
 
 	@Transactional(readOnly = true)

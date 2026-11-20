@@ -827,6 +827,10 @@ ALTER TABLE entitlement ADD CONSTRAINT entitlement_kind_no_overlap
 | 1 · AC 4.3.2 | 재발급해도 예약 기록 유지 | `booking.member_id`가 링크가 아닌 회원을 참조 |
 | 1 · AC 5.1.1 | 미개봉 수, ENDED 제외 | `member_owner_idx (instructor_id, status)` + 살아 있는 링크(`member_link_active_uidx`)의 `first_opened_at IS NULL` 집계 |
 | 1 · AC 5.1.3 | 재발급 시 최초 접속 초기화 | 새 행의 first_opened_at이 NULL. 별도 로직 불필요 |
+| 1 · AC 3.1.4 · 3.3.1 · 3.3.3 | 이름 · 메모 수정, 수강 종료 · 다시 활성화 | `member` UPDATE 한 문장(보낸 필드만). 삭제 경로 없음 |
+| 1 · AC 4.1.1 · 4.1.2 | 16바이트 난수 토큰, 해시만 저장 | `member_link_token_hash_length` CHECK(32바이트) + 원본 컬럼 없음을 테스트로 고정 |
+| 1 · AC 4.3.1 | 동시 재발급에도 유효 링크 1개 | 회원 행 `FOR NO KEY UPDATE` 뒤 끊기 · INSERT. 마지막 방어는 `member_link_active_uidx` |
+| 1 · AC 5.1.7 | 미개봉 ACTIVE → ACTIVE → ENDED, 이름순 | 목록 쿼리의 `CASE` + `name COLLATE "C"` + `id` |
 
 남은 AC는 Phase마다 2절에 AC를 쓸 때 이 표에 같이 더한다.
 
@@ -1046,6 +1050,8 @@ VALUES ($instructorId, $newHash, now() + interval '14 days');
 세션 만료는 SQL의 `now()`로 계산한다(DB 시각). 테스트에서 14일 경과는 `expires_at`을 직접 과거로 바꿔 만든다. `Clock` 주입과 섞지 않는다(BE-ADR-0013 대가 절).
 
 시간표(Phase 2)는 반대로 애플리케이션 `Clock`(서울)에서 `today` · `now`를 한 번 구해 쿼리에 넘기고, SQL의 `now()`를 쓰지 않는다. 회차 생성 · 일회성 수업 검사 · 시작한 수업 판정 · 슬롯 목록의 "지금 이후"가 모두 같은 값을 써야 테스트가 `Clock`을 고정해 경계(오늘 지난 회차, 범위 끝 날)를 확인할 수 있다. 한 흐름에서 두 시각을 섞지 않는다. 세션 정리(AC-22)는 세션 쪽이라 `now()`다.
+
+회원 링크(Phase 3)의 `issued_at` · `revoked_at`은 `now()`다. 날짜 경계를 판정하는 데 쓰지 않는 기록용 시각이고, 같은 트랜잭션에서 끊은 시각과 새 링크의 발급 시각이 같아진다.
 
 ### 3.4 마이그레이션
 

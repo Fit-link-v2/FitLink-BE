@@ -8,7 +8,7 @@
 |---|---|---|---|
 | 1 | PRD-0001 US 1 가입 · 로그인 · 세션 | AC-1 ~ AC-10 | 완료 |
 | 2 | US 2 시간표 · 오픈 범위, 매일 자정 작업 | AC-11 ~ AC-22 | 완료 |
-| 3 | US 3 회원 · US 4 링크 · US 5 개봉 상태 | AC-23 ~ AC-28 | 진행 중 (3.5 완료) |
+| 3 | US 3 회원 · US 4 링크 · US 5 개봉 상태 | AC-23 ~ AC-28 | 완료 |
 | 4 | US 3 수강권 · 회원 카드 · 월 정액 주기 | 추가 예정 | Phase 3 뒤 작성 |
 
 ### Phase 1 구조
@@ -422,24 +422,24 @@ flowchart LR
 
 ### 3.6 링크 재발급 `POST /instructor/members/{id}/link`
 
-- [ ] RED: `[BE-0001 AC-28] 재발급 → 201, 이전 링크 revoked_at, 새 링크 first_opened_at 비어 있음, 회원 id 그대로`
-- [ ] RED: `[BE-0001 AC-28] ENDED 회원도 201`, `다른 강사 id → 404, 링크 그대로`
-- [ ] RED: `[BE-0001 AC-28] 같은 회원에게 두 요청을 동시에 → 둘 다 201, 살아 있는 링크 1개` (스레드 2개 + `CountDownLatch`)
-- [ ] GREEN: 한 트랜잭션: 회원 행 `SELECT … FOR NO KEY UPDATE`(소유자 조건, 0행이면 404) → 살아 있는 링크 `revoked_at = now()` → 새 링크 INSERT. 잠금이 없으면 동시 요청 하나가 `member_link_active_uidx`에 걸려 500이 되는지 변이로 확인한다
-- [ ] REFACTOR: 회원 추가와 재발급의 "토큰 생성 → INSERT → linkUrl 조립"을 한 메서드로
+- [x] RED: `[BE-0001 AC-28] 재발급 → 201, 이전 링크 revoked_at, 새 링크 first_opened_at 비어 있음, 회원 id 그대로`
+- [x] RED: `[BE-0001 AC-28] ENDED 회원도 201`, `다른 강사 id → 404, 링크 그대로`
+- [x] RED: `[BE-0001 AC-28] 같은 회원에게 두 요청을 동시에 → 둘 다 201, 살아 있는 링크 1개` (스레드 2개 + `CountDownLatch`)
+- [x] GREEN: 한 트랜잭션: 회원 행 `SELECT … FOR NO KEY UPDATE`(소유자 조건, 0행이면 404) → 살아 있는 링크 `revoked_at = now()` → 새 링크 INSERT. 잠금이 없으면 동시 요청 하나가 `member_link_active_uidx`에 걸려 500이 되는지 변이로 확인한다 — 확인했다(잠금을 빼면 3번 돌려 3번 모두 동시 테스트 실패). 그 밖의 변이(이전 링크 끊기 제거 · 잠금의 소유자 조건 · `no-store` · 끊기의 `revoked_at IS NULL`)도 모두 테스트가 잡음. 마지막 것은 처음에 살아남아 "이미 끊은 링크의 끊은 시각은 그대로" 테스트를 더했다. 응답 record `LinkIssuedResponse`의 `toString`도 링크를 가린다. 리뷰 반영: 동시 테스트가 두 요청이 겹치지 않아도 통과할 수 있어, 테스트가 이전 링크 행을 `FOR UPDATE`로 잡고 두 요청이 모두 잠금을 기다리는 것(`pg_stat_activity`의 `wait_event_type = 'Lock'` 2개)을 확인한 뒤 놓도록 바꿨다. 이제 회원 잠금을 빼면 반드시 실패한다. 숫자가 아닌 id 400 테스트 추가. `revoked_at` · `issued_at`이 DB `now()`인 것을 `ClockConfig` 주석과 prd 시각 절에 적었다
+- [x] REFACTOR: 회원 추가와 재발급의 "토큰 생성 → INSERT → linkUrl 조립"을 한 메서드로 — GREEN에서 바로 `issue`로 묶었다
 
 ### 3.7 로그에 토큰이 없다
 
-- [ ] RED: `[BE-0001 AC-24] 로그를 TRACE로 낮추고 회원 추가 · 재발급을 한 뒤 출력 전체에 token이 없다` (`SecretLoggingTests`와 같은 방식)
-- [ ] GREEN: Spring MVC는 응답을 쓸 때 본문 객체의 `toString`을 DEBUG에서는 100자까지, TRACE에서는 전체를 남긴다. 링크를 담는 응답 record의 `toString`이 `linkUrl`을 가린다. logger 수준을 설정에서 INFO로 묶는 방법은 쓰지 않는다. 운영에서 그 logger를 직접 낮추면 다시 찍히기 때문이다. `toString` 재정의를 빼면 테스트가 실패하는 것 확인
-- [ ] REFACTOR: 없음이면 건너뜀
+- [x] RED: `[BE-0001 AC-24] 로그를 TRACE로 낮추고 회원 추가 · 재발급을 한 뒤 출력 전체에 token이 없다` (`SecretLoggingTests`와 같은 방식)
+- [x] GREEN: Spring MVC는 응답을 쓸 때 본문 객체의 `toString`을 DEBUG에서는 100자까지, TRACE에서는 전체를 남긴다. 링크를 담는 응답 record의 `toString`이 `linkUrl`을 가린다. logger 수준을 설정에서 INFO로 묶는 방법은 쓰지 않는다. 운영에서 그 logger를 직접 낮추면 다시 찍히기 때문이다. `toString` 재정의를 빼면 테스트가 실패하는 것 확인 — 응답 record의 가림은 3.3 · 3.6 리뷰 반영으로 먼저 넣어서, 이 테스트는 처음부터 통과했다(RED 없음). 대신 `MemberAddedResponse` · `LinkIssuedResponse`의 `toString` 재정의를 각각 빼면 이 테스트가 실패하는 것으로 테스트가 실제로 잡는지 확인했다. 흐름은 회원 추가 → 재발급 → 목록, TRACE 로그가 실제로 찍혔는지(` TRACE `)도 본다
+- [x] REFACTOR: 없음
 
 ### 3.8 doc-sync
 
-- [ ] REFACTOR: 회원 `POLICY.md` 규칙 절 · `data-model.md`, `overview.md`(필요하면), `feature.yaml`, prd 3.1 AC 대 제약 표, `application.yml` 설정 설명
+- [x] REFACTOR: 회원 `POLICY.md` 규칙 절 · `data-model.md`, `overview.md`(필요하면), `feature.yaml`, prd 3.1 AC 대 제약 표, `application.yml` 설정 설명 — 회원 `POLICY.md` 규칙 · 하지 않는 것, `data-model.md`의 목록 · 재발급 쿼리와 제약 표, prd AC 대 제약 표에 Phase 3 행. `overview.md`는 바뀐 구조가 없어 그대로, `feature.yaml`은 Phase 4가 남아 `in-progress` 그대로, 설정 설명은 3.3에서 `application.yml`에 적었다
 
 ## Phase 3 끝난 뒤 확인
 
-- [ ] `./gradlew test` 전체 통과, `ModularityTests` 통과
-- [ ] local에서 앱을 띄워 회원 추가 → 목록 → 수정 · 수강 종료 → 재발급을 curl로 한 번씩. 응답의 `linkUrl` 토큰이 앱 로그에 없는지 확인
+- [x] `./gradlew test` 전체 통과(277개), `ModularityTests` 통과
+- [x] local에서 앱을 띄워 회원 추가 → 목록 → 수정 · 수강 종료 → 재발급을 curl로 한 번씩. 응답의 `linkUrl` 토큰이 앱 로그에 없는지 확인 — 2026-11-18. 점검용 강사 · 세션은 DB에 직접 넣고 끝난 뒤 지웠다. V5 적용, 이름 공백 제거, 응답 `Cache-Control: no-store`, 공백 이름 400, 목록 순서(링크 연 회원이 뒤, `Bob` → `amy` 코드 순), 메모 지우기 + 종료, ENDED 재발급 뒤 미개봉, 이전 링크 끊김 · 해시 32바이트, 없는 id 404, 앱 로그에 토큰 2개 모두 0회
 
