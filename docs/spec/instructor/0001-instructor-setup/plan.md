@@ -526,7 +526,7 @@ flowchart LR
 - [x] GREEN: `V6__entitlement.sql`(prd 3.1 수강권 · 월 정액 DDL 그대로: `btree_gist`, `subscription`, `entitlement`, 인덱스 · 제약). 조건을 하나씩 빼면 테스트가 실패하는 것 확인
 - [x] REFACTOR: `EntitlementFixtures`
 
-변이 34건 중 31건을 테스트가 잡았다. 남은 3건(부분 유니크의 `WHERE source_id IS NOT NULL` 제거, `subscription_max_length` 336 → 337, `subscription_range_order` 제거)은 동작이 같다. NULL끼리는 기본으로 유니크 비교를 하지 않고, 기간은 `subscription_end` 때문에 7일 단위로만 늘며, `starts_on <= ends_on`은 `subscription_end`와 `period_count > 0`에서 따라 나온다. 준비 데이터 `EntitlementFixtures`는 테스트를 쓸 때 같이 만들었다.
+변이 39건 중 36건을 테스트가 잡았다. 리뷰 뒤 외래 키 3개(`entitlement.source_id` · `entitlement.member_id` · `subscription.member_id`)와 `used_count` 기본값 0 테스트를 더했고, 각 외래 키 제거 · `DEFAULT 0` 제거 · `DEFAULT 1`로 바꾸기 변이 5건이 모두 실패로 잡혔다. 남은 3건(부분 유니크의 `WHERE source_id IS NOT NULL` 제거, `subscription_max_length` 336 → 337, `subscription_range_order` 제거)은 동작이 같다. NULL끼리는 기본으로 유니크 비교를 하지 않고, 기간은 `subscription_end` 때문에 7일 단위로만 늘며, `starts_on <= ends_on`은 `subscription_end`와 `period_count > 0`에서 따라 나온다. 준비 데이터 `EntitlementFixtures`는 테스트를 쓸 때 같이 만들었다.
 
 ### 4.3 횟수권 등록 `POST /instructor/members/{id}/entitlements`
 
