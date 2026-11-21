@@ -49,7 +49,7 @@ flowchart LR
 
 ```
 {모듈}/
-  {모듈}Facade        다른 모듈이 부르는 유일한 창구(모듈 루트). 로직 없이 service에 넘긴다
+  {모듈}Facade        다른 모듈이 부르는 유일한 창구(모듈 루트). Info로 바꾸는 계산 말고는 로직 없이 service에 넘긴다
   {모듈}...Command    Facade가 받는 값 / {모듈}...Info  Facade가 돌려주는 값
   {모듈}...Event      다른 모듈에 알리는 이벤트(모듈 루트)
   controller/         HTTP 요청 · 응답
@@ -63,7 +63,7 @@ flowchart LR
 
 - 모듈 안의 호출은 `controller → service → repository` 한 방향이다
 - 다른 모듈은 상대 모듈 루트의 `{모듈}Facade`만 부른다. `model`은 내보내지 않고 `Info`로 바꿔 준다
-- 같은 URL이라도 쓰기는 도메인 모듈, 여러 도메인을 모으는 읽기는 `bff`에 둔다. `bff`는 Facade의 Info를 짝짓기만 하고 SQL · 규칙을 갖지 않는다([BE-ADR-0020](../decisions/0020-bff-module.md))
+- 같은 URL이라도 쓰기는 도메인 모듈, 여러 도메인을 모으는 읽기는 `bff`에 둔다. `bff`는 Facade의 Info를 짝짓기만 하고 SQL · 규칙을 갖지 않는다([BE-ADR-0020](../decisions/0020-bff-module.md)). `bff` 안은 `controller · dto · service · model`이다. 레이어 규칙상 dto는 controller만, 모듈 루트(Info)는 service만 접근하므로 service가 받은 Info를 `bff`의 model로 바꿔 controller에 넘긴다
 - 의존 방향을 거슬러 알려야 할 때(예: `instructor`가 범위를 늘렸음을 `schedule`에)는 발행 모듈 루트의 `{모듈}…Event`를 발행하고, 받는 모듈의 `service`가 같은 트랜잭션의 동기 리스너로 받는다([BE-ADR-0019](../decisions/0019-module-events.md))
 - 쓰기는 Transaction Script다. 서비스 메서드 하나가 트랜잭션 하나이고, 규칙은 SQL 조건과 DB 제약에 둔다. 전술적 DDD(Entity · Aggregate)는 쓰지 않는다
 - SQL은 `repository`에만 두고, Repository는 `record`를 주고받는다([BE-ADR-0012](../decisions/0012-jdbc-client.md))
