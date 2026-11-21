@@ -1,4 +1,4 @@
-package com.fitlink.membership.controller;
+package com.fitlink.bff.controller;
 
 import static com.fitlink.membership.MembershipFixtures.hash;
 import static org.hamcrest.Matchers.contains;

@@ -4,8 +4,7 @@ import com.fitlink.membership.dto.LinkIssuedResponse;
 import com.fitlink.membership.dto.MemberAddRequest;
 import com.fitlink.membership.dto.MemberAddedResponse;
 import com.fitlink.membership.dto.MemberChangeRequest;
-import com.fitlink.membership.dto.MemberDetailResponse;
-import com.fitlink.membership.dto.MemberListResponse;
+import com.fitlink.membership.dto.MemberResponse;
 import com.fitlink.membership.model.AddedMember;
 import com.fitlink.membership.service.MemberService;
 import jakarta.validation.Valid;
@@ -13,7 +12,6 @@ import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -22,6 +20,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import tools.jackson.databind.JsonNode;
 
+// 회원 쓰기만 둔다. 같은 주소의 목록 · 상세 조회는 수강권 카드를 함께 모으므로 bff 모듈에 있다
 @RestController
 @RequestMapping("/instructor/members")
 class MemberController {
@@ -40,25 +39,14 @@ class MemberController {
 		AddedMember added = members.add(instructorId, request.name(), request.memo());
 		return ResponseEntity.status(HttpStatus.CREATED)
 			.cacheControl(CacheControl.noStore())
-			.body(new MemberAddedResponse(MemberDetailResponse.of(added.member()), added.link().url()));
-	}
-
-
-	@GetMapping
-	MemberListResponse list(@AuthenticationPrincipal Long instructorId) {
-		return MemberListResponse.of(members.list(instructorId));
-	}
-
-	@GetMapping("/{id}")
-	MemberDetailResponse get(@AuthenticationPrincipal Long instructorId, @PathVariable long id) {
-		return MemberDetailResponse.of(members.get(instructorId, id));
+			.body(new MemberAddedResponse(MemberResponse.of(added.member()), added.link().url()));
 	}
 
 
 	@PatchMapping("/{id}")
-	MemberDetailResponse change(@AuthenticationPrincipal Long instructorId, @PathVariable long id,
+	MemberResponse change(@AuthenticationPrincipal Long instructorId, @PathVariable long id,
 			@RequestBody JsonNode body) {
-		return MemberDetailResponse.of(members.change(instructorId, id, MemberChangeRequest.from(body)));
+		return MemberResponse.of(members.change(instructorId, id, MemberChangeRequest.from(body)));
 	}
 
 
