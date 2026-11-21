@@ -27,6 +27,12 @@ public class MembershipFacade {
 		return info(members.get(instructorId, memberId));
 	}
 
+	// 회원 행을 잠그고 ACTIVE인지 돌려준다. 같은 회원의 수강권 등록을 한 줄로 세우는 잠금이라 부르는 쪽의 트랜잭션 안에서 부른다
+	// (트랜잭션이 없으면 예외). 잠금은 그 트랜잭션이 끝날 때 풀린다. 다른 강사의 회원과 없는 회원은 똑같이 NOT_FOUND 예외다
+	public boolean lockActive(long instructorId, long memberId) {
+		return members.lock(instructorId, memberId) == MemberStatus.ACTIVE;
+	}
+
 	// 수강 종료(ENDED) 회원은 링크를 열지 않았어도 미개봉 수에 넣지 않는다
 	private static MembershipMemberInfo info(Member member) {
 		boolean unopened = member.status() == MemberStatus.ACTIVE && !member.linkOpened();

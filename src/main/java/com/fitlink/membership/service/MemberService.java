@@ -13,6 +13,7 @@ import com.fitlink.membership.repository.MemberLinkRepository;
 import com.fitlink.membership.repository.MemberRepository;
 import java.util.List;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
@@ -41,11 +42,17 @@ public class MemberService {
 	// 다시 활성화하지 않고 바로 할 수 있어야 한다. 회원 행을 먼저 잠가 같은 회원의 재발급이 동시에 와도 차례로 돈다
 	@Transactional
 	public IssuedLink reissue(long instructorId, long memberId) {
-		if (!members.lock(instructorId, memberId)) {
+		if (members.lock(instructorId, memberId).isEmpty()) {
 			throw notFound();
 		}
 		links.revokeLive(memberId);
 		return issue(memberId);
+	}
+
+	// 부르는 쪽의 트랜잭션 안에서만 의미가 있다. 잠금은 그 트랜잭션이 끝날 때 풀린다
+	@Transactional(propagation = Propagation.MANDATORY)
+	public MemberStatus lock(long instructorId, long memberId) {
+		return members.lock(instructorId, memberId).orElseThrow(MemberService::notFound);
 	}
 
 	private IssuedLink issue(long memberId) {
