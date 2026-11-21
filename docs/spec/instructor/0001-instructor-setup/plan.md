@@ -531,11 +531,16 @@ flowchart LR
 
 ### 4.3 횟수권 등록 `POST /instructor/members/{id}/entitlements`
 
-- [ ] RED: `[BE-0001 AC-29] PASS 11-01 ~ 12-31 · 10 → 201 카드, 1행`, `오늘 종료는 된다`, `같은 기간 두 번 → 2행`
-- [ ] RED: `[BE-0001 AC-29] startsOn > endsOn · maxCount 0 · 1000 · endsOn 어제 · kind 없음 · 모르는 kind → 400 fields, 행 없음`
-- [ ] RED: `[BE-0001 AC-31] 다른 강사 · 없는 회원 → 404, ENDED → 422 MEMBER_ENDED`
-- [ ] GREEN: `EntitlementController` · `EntitlementService`(한 트랜잭션: 4.1의 `MembershipFacade`에 더한 회원 잠금 메서드로 잠금 · 상태 → 검사 → INSERT) · `EntitlementRepository`. 요청은 `kind`로 갈리는 두 모양이라 받는 방법(하나의 record + 종류별 검사, 또는 다형 역직렬화)을 여기서 정한다
-- [ ] REFACTOR: 카드 응답 조립을 4.6과 나눠 쓸 수 있게 정리
+- [x] RED: `[BE-0001 AC-29] PASS 11-01 ~ 12-31 · 10 → 201 카드, 1행`, `오늘 종료는 된다`, `같은 기간 두 번 → 2행`
+- [x] RED: `[BE-0001 AC-29] startsOn > endsOn · maxCount 0 · 1000 · endsOn 어제 · kind 없음 · 모르는 kind → 400 fields, 행 없음`
+- [x] RED: `[BE-0001 AC-31] 다른 강사 · 없는 회원 → 404, ENDED → 422 MEMBER_ENDED`
+- [x] GREEN: `EntitlementController` · `EntitlementService`(한 트랜잭션: 4.1의 `MembershipFacade`에 더한 회원 잠금 메서드로 잠금 · 상태 → 검사 → INSERT) · `EntitlementRepository`. 요청은 `kind`로 갈리는 두 모양이라 받는 방법(하나의 record + 종류별 검사, 또는 다형 역직렬화)을 여기서 정한다
+- [x] REFACTOR: 카드 응답 조립을 4.6과 나눠 쓸 수 있게 정리
+- 정한 것: 요청은 `JsonNode`로 받아 `kind`를 먼저 보고 그 모양의 필드만 읽는다(`entitlement/dto/EntitlementRegisterRequest`). record로 받으면 `maxCount: 1.5`가 정수 필드에 잘려 들어가고, 다형 역직렬화는 모르는 `kind`를 어느 필드 문제인지 알려 주지 못한다. 400은 처음 틀린 필드 하나다. 종료일이 오늘 이후인지는 오늘을 아는 `EntitlementService`가 회원 잠금 전에 본다(400이 404보다 먼저)
+- 정한 것: 회원 잠금은 `MembershipFacade.lockActive`(잠그고 ACTIVE인지 돌려줌, 없거나 남의 회원이면 NOT_FOUND)다. `MemberService.lock`이 `Propagation.MANDATORY`라 트랜잭션 밖에서 부르면 예외다. 링크 재발급과 같은 `MemberRepository.lock`(`SELECT status … FOR NO KEY UPDATE`)을 쓴다
+- 정한 것: 카드 상태 계산은 `entitlement/model/CardState.of`, 응답은 `PassCardResponse.of(PassCard)`다. 4.6 카드 계산이 같은 `CardState`를 쓴다
+- 4.4 전까지 `kind: "SUBSCRIPTION"`은 400(`kind`)이다. 4.4에서 월 정액 모양을 더한다
+- 테스트 `PassRegisterApiTests` 27개, `MembershipFacadeTests` 3개. 전체 358개 통과. 변이 14건(종료일 · 회원 상태 · 소유자 조건 · 카드 상태 경계 3 · 횟수 경계 2 · 소수 횟수 · 모르는 kind · 시작일 > 종료일 · 남은 횟수 · `MANDATORY` 제거)을 모두 테스트가 잡았다. 회원 잠금(`FOR NO KEY UPDATE`)을 빼는 변이는 4.4의 동시 등록 테스트가 잡는다
 
 ### 4.4 월 정액 등록 · 종류 겹침
 
@@ -545,6 +550,7 @@ flowchart LR
 - [ ] RED: `[BE-0001 AC-31] 같은 회원에게 횟수권 · 월 정액을 동시에 → 하나만 201`, `entitlement_kind_no_overlap 위반은 422 PERIOD_OVERLAP`(처리기를 직접 부르는 테스트)
 - [ ] GREEN: 등록 트랜잭션에 월 정액 INSERT → 그 한 건의 주기 생성(수강권 쓰기 경로 1.2 · 2의 SQL). 다른 종류 검사는 쓰기 경로 1.1 · 1.2의 `active_until` · `overlaps` 한 쿼리로 하고, 월 정액은 `starts_on ~ ends_on` 전체와 비교한다
 - [ ] REFACTOR: 두 종류의 검사를 한 메서드로
+- 4.3에서 넘어온 것: `EntitlementRegisterRequest.from`이 `PassRegistration`을, 컨트롤러가 `PassCardResponse`를 바로 돌려준다. 월 정액을 더할 때 등록 입력 · 카드 응답을 종류별 record를 묶는 sealed interface로 바꾸고, `kind` 400 문구를 "PASS 또는 SUBSCRIPTION을 보낸다"로 고친다. `PassRegisterApiTests`의 "월 정액은 아직 받지 않는다" 케이스를 지운다
 
 ### 4.5 주기 생성 작업 · 오픈 범위 이벤트
 
