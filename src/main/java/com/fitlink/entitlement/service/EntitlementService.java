@@ -4,7 +4,6 @@ import com.fitlink.common.exception.FitlinkException;
 import com.fitlink.common.exception.InvalidRequestException;
 import com.fitlink.entitlement.exception.EntitlementErrorCode;
 import com.fitlink.entitlement.model.Card;
-import com.fitlink.entitlement.model.CardState;
 import com.fitlink.entitlement.model.OtherKind;
 import com.fitlink.entitlement.model.PassCard;
 import com.fitlink.entitlement.model.PassRegistration;
@@ -29,15 +28,18 @@ public class EntitlementService {
 
 	private final PeriodGeneration periods;
 
+	private final CardReader cards;
+
 	private final MembershipFacade memberships;
 
 	private final Clock clock;
 
 	EntitlementService(EntitlementRepository entitlements, SubscriptionRepository subscriptions,
-			PeriodGeneration periods, MembershipFacade memberships, Clock clock) {
+			PeriodGeneration periods, CardReader cards, MembershipFacade memberships, Clock clock) {
 		this.entitlements = entitlements;
 		this.subscriptions = subscriptions;
 		this.periods = periods;
+		this.cards = cards;
 		this.memberships = memberships;
 		this.clock = clock;
 	}
@@ -58,8 +60,9 @@ public class EntitlementService {
 		}
 		rejectOtherKind(otherKind(memberId, registration, today));
 		return switch (registration) {
-			case PassRegistration pass -> registerPass(memberId, pass, today);
-			case SubscriptionRegistration subscription -> registerSubscription(memberId, subscription, today);
+			case PassRegistration pass -> registerPass(instructorId, memberId, pass, today);
+			case SubscriptionRegistration subscription ->
+				registerSubscription(instructorId, memberId, subscription, today);
 		};
 	}
 
@@ -83,20 +86,18 @@ public class EntitlementService {
 		}
 	}
 
-	private PassCard registerPass(long memberId, PassRegistration pass, LocalDate today) {
+	// 응답 카드는 목록과 같은 계산으로 방금 저장한 행을 다시 읽어 만든다
+	private PassCard registerPass(long instructorId, long memberId, PassRegistration pass, LocalDate today) {
 		long id = entitlements.insertPass(memberId, pass);
-		return new PassCard(id, pass.startsOn(), pass.endsOn(), pass.maxCount(), pass.maxCount(),
-				CardState.of(pass.startsOn(), pass.endsOn(), today));
+		return cards.card(instructorId, memberId, PassCard.class, id, today);
 	}
 
 	// 오픈 범위 안의 주기를 같은 트랜잭션에서 바로 만든다. 회원이 그 범위의 수업을 예약하려면 주기 행이 있어야 한다
-	private SubscriptionCard registerSubscription(long memberId, SubscriptionRegistration subscription,
-			LocalDate today) {
+	private SubscriptionCard registerSubscription(long instructorId, long memberId,
+			SubscriptionRegistration subscription, LocalDate today) {
 		long id = subscriptions.insert(memberId, subscription);
 		periods.generate(id, today);
-		return new SubscriptionCard(id, subscription.per(), subscription.count(), subscription.startsOn(),
-				subscription.endsOn(), CardState.of(subscription.startsOn(), subscription.endsOn(), today),
-				subscriptions.currentPeriod(id, today).orElse(null));
+		return cards.card(instructorId, memberId, SubscriptionCard.class, id, today);
 	}
 
 }

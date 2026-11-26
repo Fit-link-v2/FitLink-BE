@@ -16,7 +16,7 @@ import java.util.List;
 import java.util.Map;
 import org.springframework.stereotype.Service;
 
-// 회원별 카드 목록을 만든다. 상태는 오늘 기준이고, 순서는 다음에 차감될 순서다
+// 카드 목록과 등록 응답이 이 계산을 쓴다. 그래서 같은 수강권은 어디서 읽어도 같은 카드가 된다
 @Service
 public class CardReader {
 
@@ -43,6 +43,16 @@ public class CardReader {
 			.stream()
 			.collect(groupingBy(MemberCard::memberId, collectingAndThen(mapping(MemberCard::card, toList()),
 					list -> list.stream().sorted(CardOrder.NEXT_TO_DEDUCT).toList())));
+	}
+
+	// 방금 쓴 수강권 한 장의 카드. 같은 트랜잭션에서 부르므로 아직 커밋하지 않은 행도 읽는다
+	public <T extends Card> T card(long instructorId, long memberId, Class<T> type, long id, LocalDate today) {
+		return cards(instructorId, List.of(memberId), today).getOrDefault(memberId, List.of())
+			.stream()
+			.filter(card -> type.isInstance(card) && card.id() == id)
+			.map(type::cast)
+			.findFirst()
+			.orElseThrow(() -> new IllegalStateException(type.getSimpleName() + " " + id + "의 카드가 없다"));
 	}
 
 }
