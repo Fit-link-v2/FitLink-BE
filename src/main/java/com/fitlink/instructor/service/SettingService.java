@@ -34,7 +34,7 @@ public class SettingService {
 		return settings.findOpenRangeDays(instructorId).orElseThrow(() -> missingRow(instructorId));
 	}
 
-	// 늘렸을 때만 이벤트를 발행한다. 받는 쪽(회차 생성)은 같은 트랜잭션에서 동기로 돌아, 실패하면 이 변경도 되돌아간다.
+	// 늘렸을 때만 이벤트를 발행한다. 받는 쪽은 같은 트랜잭션에서 동기로 돌고, 예외를 밖으로 던지면 이 변경도 되돌아간다.
 	// 줄이면 범위 밖 슬롯을 지우지 않고 그대로 둔다. 이 모듈은 이벤트를 누가 받는지 모른다
 	@Transactional
 	public int changeOpenRangeDays(long instructorId, int openRangeDays) {

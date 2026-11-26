@@ -463,7 +463,7 @@ flowchart TB
         ES["service/EntitlementService<br/>등록 · 잔여 수정"]
         PG["service/PeriodGeneration<br/>주기 생성"]
         PJ["service/PeriodJobs<br/>자정 · 앱 시작"]
-        OL["service/OpenRangeListener<br/>오픈 범위 이벤트"]
+        OL["service/PeriodOpenRangeListener<br/>오픈 범위 이벤트"]
         CR["service/CardReader<br/>카드 계산 · 순서"]
     end
     subgraph instructor["instructor 모듈"]
@@ -559,10 +559,16 @@ flowchart LR
 
 ### 4.5 주기 생성 작업 · 오픈 범위 이벤트
 
-- [ ] RED: `[BE-0001 AC-32] 강사 2명, Clock을 하루 넘겨 전체 생성 → 두 강사 모두 새 주기`, `한 건 INSERT 실패 → 다른 건은 생기고 실패 로그`, `ApplicationReadyEvent → 주기 생성`, `두 번 돌려도 같음, period_count를 넘지 않음, ENDED 회원도 생성`
-- [ ] RED: `[BE-0001 AC-32] 오픈 범위 14 → 28이면 응답 전에 주기가 늘고, 한 건이 실패해도 open_range_days 28 · 회차 · 다른 건 주기는 저장`
-- [ ] GREEN: `PeriodGeneration`(한 건 / 강사 / 전체), `PeriodJobs`(`@Scheduled` cron · zone · 1분 여유, 앱 시작, 건별 트랜잭션, 실패는 로그), `OpenRangeListener`(이벤트의 today, 건마다 savepoint)
-- [ ] REFACTOR: cron · zone 값 테스트(시간표 작업과 같은 방식)
+- [x] RED: `[BE-0001 AC-32] 강사 2명, Clock을 하루 넘겨 전체 생성 → 두 강사 모두 새 주기`, `한 건 INSERT 실패 → 다른 건은 생기고 실패 로그`, `ApplicationReadyEvent → 주기 생성`, `두 번 돌려도 같음, period_count를 넘지 않음, ENDED 회원도 생성`
+- [x] RED: `[BE-0001 AC-32] 오픈 범위 14 → 28이면 응답 전에 주기가 늘고, 한 건이 실패해도 open_range_days 28 · 회차 · 다른 건 주기는 저장`
+- [x] GREEN: `PeriodGeneration`(한 건 / 강사 / 전체), `PeriodJobs`(`@Scheduled` cron · zone · 1분 여유, 앱 시작, 건별 트랜잭션, 실패는 로그), `PeriodOpenRangeListener`(이벤트의 today, 건마다 savepoint)
+- [x] REFACTOR: cron · zone 값 테스트(시간표 작업과 같은 방식)
+- 정한 것: 리스너 이름은 `PeriodOpenRangeListener`다. 시간표 모듈의 `OpenRangeListener`와 같은 이름이면 기본 빈 이름 `openRangeListener`가 겹쳐 앱이 뜨지 않는다
+- 정한 것: 건별로 되돌리는 방법은 `TransactionTemplate` 두 개다. 자정 · 앱 시작은 `PROPAGATION_REQUIRES_NEW`(건마다 새 트랜잭션), 오픈 범위 변경은 `PROPAGATION_NESTED`(요청 트랜잭션 안의 savepoint)다. 대상은 `SubscriptionRepository.unfinished`(아직 끝나지 않은 월 정액, ENDED 회원 포함)다
+- 정한 것: 월 정액 등록과 오픈 범위 늘리기가 동시에 커밋되면 그 월 정액은 늘어난 구간 전체에 주기가 없고, 다음 자정 작업이 채운다. 같은 강사가 두 화면에서 동시에 해야 생기므로 막지 않는다. 막으려면 등록 트랜잭션에서 주기 생성 전에 `setting` 행을 `FOR SHARE`로 따로 잠그면 된다(생성 SQL 안의 `FOR SHARE`로는 안 된다). 시간표 규칙 등록에도 같은 틈이 있다
+- 테스트: `PeriodJobsTests` 11개, `PeriodOpenRangeListenerTests` 4개. 전체 421개 통과. 이번에는 구현 전에 RED를 먼저 돌렸다. 빈 `PeriodJobs`에 그때 테스트 13개를 얹어 11개가 실패했다. 통과한 2개(앱 시작 때 예외 없음, 다른 강사 주기 없음)는 아무것도 하지 않아도 통과하는 테스트라 변이로 확인했다
+- 변이 17건 중 15건을 테스트가 잡았다. 4.4에서 남은 `ON CONFLICT` 제거도 잡는다. 남은 2건은 결과가 같은 변이다. `generateAll`을 NESTED로 바꾸는 것(바깥 트랜잭션이 없으면 새 트랜잭션과 같다)과 `unfinished`의 `ends_on >= today`를 빼는 것(생성 SQL이 끝난 주기를 다시 거른다. 대상 수만 줄이는 조건이다)이다
+- 리뷰 반영: 대상 조회 자체가 실패할 때 앱이 멈추지 않는지(바깥 try/catch) 보는 테스트를 더했다. 이벤트 · `SettingService`의 "받는 쪽이 실패하면 되돌아간다" 주석을 "예외를 밖으로 던지면"으로 고쳤다. 쓰기 경로 2절의 "슬롯 생성에 이어서, 같은 `$today`로"는 구현(순서를 맞추지 않는 독립 작업)과 달라 4.9에서 고친다
 
 ### 4.6 카드 계산 (EntitlementFacade · CardReader)
 

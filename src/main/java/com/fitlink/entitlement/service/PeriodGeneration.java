@@ -26,10 +26,15 @@ public class PeriodGeneration {
 	// 자정 · 앱 시작: 건마다 새 트랜잭션
 	private final TransactionTemplate eachInNewTransaction;
 
+	// 오픈 범위 변경: 그 요청의 트랜잭션 안에서 건마다 savepoint
+	private final TransactionTemplate eachInSavepoint;
+
 	PeriodGeneration(SubscriptionRepository subscriptions, PlatformTransactionManager transactions) {
 		this.subscriptions = subscriptions;
 		this.eachInNewTransaction = new TransactionTemplate(transactions);
 		this.eachInNewTransaction.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+		this.eachInSavepoint = new TransactionTemplate(transactions);
+		this.eachInSavepoint.setPropagationBehavior(TransactionDefinition.PROPAGATION_NESTED);
 	}
 
 	// 등록 직후. 부르는 쪽의 트랜잭션에 합류하고, 실패하면 등록도 되돌아간다
@@ -40,6 +45,12 @@ public class PeriodGeneration {
 	// 모든 강사의 끝나지 않은 월 정액. 새로 만든 주기 수를 돌려준다
 	public int generateAll(LocalDate today) {
 		return generateEach(subscriptions.unfinished(null, today), today, eachInNewTransaction);
+	}
+
+	// 오픈 범위를 늘린 강사의 끝나지 않은 월 정액. 한 건이 실패하면 그 건만 savepoint로 되돌리므로
+	// 부르는 쪽의 트랜잭션(오픈 범위 변경 · 회차 생성)은 그대로 커밋된다
+	public int generateFor(long instructorId, LocalDate today) {
+		return generateEach(subscriptions.unfinished(instructorId, today), today, eachInSavepoint);
 	}
 
 	private int generateEach(Iterable<Long> subscriptionIds, LocalDate today, TransactionTemplate each) {
