@@ -5,6 +5,7 @@ import com.fitlink.common.exception.InvalidRequestException;
 import com.fitlink.entitlement.exception.EntitlementErrorCode;
 import com.fitlink.entitlement.model.Card;
 import com.fitlink.entitlement.model.CardState;
+import com.fitlink.entitlement.model.OtherKind;
 import com.fitlink.entitlement.model.PassCard;
 import com.fitlink.entitlement.model.PassRegistration;
 import com.fitlink.entitlement.model.Registration;
@@ -15,6 +16,7 @@ import com.fitlink.entitlement.repository.SubscriptionRepository;
 import com.fitlink.membership.MembershipFacade;
 import java.time.Clock;
 import java.time.LocalDate;
+import java.util.Map;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -40,7 +42,8 @@ public class EntitlementService {
 		this.clock = clock;
 	}
 
-	// 판정 순서는 입력(400) → 회원(404) → 수강 종료(422)다. 회원 행을 잠그고 시작해 같은 회원의 등록이 동시에 와도 차례로 돈다.
+	// 판정 순서는 입력(400) → 회원(404) → 수강 종료(422) → 다른 종류(422)다.
+	// 회원 행을 잠그고 검사해, 같은 회원에게 다른 종류 등록 두 개가 동시에 와도 늦은 쪽은 먼저 저장된 행을 보고 검사한다.
 	// 지난 시작일은 받는다. 이미 진행 중인 수강권을 옮겨 적는 경우다
 	@Transactional
 	public Card register(long instructorId, long memberId, Registration registration) {
@@ -53,10 +56,31 @@ public class EntitlementService {
 		if (!memberships.lockActive(instructorId, memberId)) {
 			throw new FitlinkException(EntitlementErrorCode.MEMBER_ENDED);
 		}
+		rejectOtherKind(otherKind(memberId, registration, today));
 		return switch (registration) {
 			case PassRegistration pass -> registerPass(memberId, pass, today);
 			case SubscriptionRegistration subscription -> registerSubscription(memberId, subscription, today);
 		};
+	}
+
+	// 같은 종류끼리는 보지 않는다. 겹쳐도 된다
+	private OtherKind otherKind(long memberId, Registration registration, LocalDate today) {
+		return switch (registration) {
+			case PassRegistration pass -> subscriptions.against(memberId, pass.startsOn(), pass.endsOn(), today);
+			case SubscriptionRegistration subscription ->
+				entitlements.passesAgainst(memberId, subscription.startsOn(), subscription.endsOn(), today);
+		};
+	}
+
+	// 만료되지 않은 다른 종류가 먼저다. 그 수강권들이 모두 끝난 다음 날부터 등록할 수 있다
+	private static void rejectOtherKind(OtherKind other) {
+		if (other.activeUntil() != null) {
+			throw new FitlinkException(EntitlementErrorCode.ENTITLEMENT_OTHER_KIND_ACTIVE,
+					Map.of("availableFrom", other.activeUntil().plusDays(1).toString()));
+		}
+		if (other.overlaps()) {
+			throw new FitlinkException(EntitlementErrorCode.ENTITLEMENT_PERIOD_OVERLAP);
+		}
 	}
 
 	private PassCard registerPass(long memberId, PassRegistration pass, LocalDate today) {

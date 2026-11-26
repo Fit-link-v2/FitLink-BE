@@ -1,6 +1,7 @@
 package com.fitlink.entitlement.repository;
 
 import com.fitlink.entitlement.model.CurrentPeriod;
+import com.fitlink.entitlement.model.OtherKind;
 import com.fitlink.entitlement.model.SubscriptionRegistration;
 import java.time.LocalDate;
 import java.util.Optional;
@@ -28,6 +29,23 @@ public class SubscriptionRepository {
 			.param("periodCount", subscription.periodCount())
 			.param("endsOn", subscription.endsOn())
 			.query(Long.class)
+			.single();
+	}
+
+	// 횟수권을 등록하려 할 때 그 회원의 월 정액을 본다. 기간은 아직 만들지 않은 주기까지 포함한 등록 전체다
+	public OtherKind against(long memberId, LocalDate startsOn, LocalDate endsOn, LocalDate today) {
+		return jdbc.sql("""
+				SELECT max(ends_on) FILTER (WHERE ends_on >= :today) AS active_until,
+				       coalesce(bool_or(daterange(starts_on, ends_on, '[]')
+				                        && daterange(CAST(:startsOn AS date), CAST(:endsOn AS date), '[]')), false) AS overlaps
+				  FROM subscription
+				 WHERE member_id = :memberId
+				""")
+			.param("today", today)
+			.param("startsOn", startsOn)
+			.param("endsOn", endsOn)
+			.param("memberId", memberId)
+			.query((rs, row) -> new OtherKind(rs.getObject("active_until", LocalDate.class), rs.getBoolean("overlaps")))
 			.single();
 	}
 
