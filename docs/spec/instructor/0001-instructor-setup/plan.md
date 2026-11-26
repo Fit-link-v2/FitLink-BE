@@ -544,13 +544,18 @@ flowchart LR
 
 ### 4.4 월 정액 등록 · 종류 겹침
 
-- [ ] RED: `[BE-0001 AC-30] WEEK 2회 · 11-05 · 8주 → 201, subscription(period_count 8, ends_on 12-30), 주기 11-12 · 11-19 두 행`, `FOUR_WEEKS 8주 → period_count 2, 28일 주기`
-- [ ] RED: `[BE-0001 AC-30] weeks 3 · 0 · 52, count 0 · 100, per MONTH, 종료일이 어제 → 400`
-- [ ] RED: `[BE-0001 AC-31] 살아 있는 횟수권이 있으면 월 정액 → OTHER_KIND_ACTIVE + availableFrom`, `월 정액의 아직 안 만든 주기와 겹치는 횟수권 → OTHER_KIND_ACTIVE`, `다른 종류가 만료됐고 기간만 겹치면 PERIOD_OVERLAP`, `만료됐고 안 겹치면 201`
-- [ ] RED: `[BE-0001 AC-31] 같은 회원에게 횟수권 · 월 정액을 동시에 → 하나만 201`, `entitlement_kind_no_overlap 위반은 422 PERIOD_OVERLAP`(처리기를 직접 부르는 테스트)
-- [ ] GREEN: 등록 트랜잭션에 월 정액 INSERT → 그 한 건의 주기 생성(수강권 쓰기 경로 1.2 · 2의 SQL). 다른 종류 검사는 쓰기 경로 1.1 · 1.2의 `active_until` · `overlaps` 한 쿼리로 하고, 월 정액은 `starts_on ~ ends_on` 전체와 비교한다
-- [ ] REFACTOR: 두 종류의 검사를 한 메서드로
-- 4.3에서 넘어온 것: `EntitlementRegisterRequest.from`이 `PassRegistration`을, 컨트롤러가 `PassCardResponse`를 바로 돌려준다. 월 정액을 더할 때 등록 입력 · 카드 응답을 종류별 record를 묶는 sealed interface로 바꾸고, `kind` 400 문구를 "PASS 또는 SUBSCRIPTION을 보낸다"로 고친다. `PassRegisterApiTests`의 "월 정액은 아직 받지 않는다" 케이스를 지운다
+- [x] RED: `[BE-0001 AC-30] WEEK 2회 · 11-05 · 8주 → 201, subscription(period_count 8, ends_on 12-30), 주기 11-12 · 11-19 두 행`, `FOUR_WEEKS 8주 → period_count 2, 28일 주기`
+- [x] RED: `[BE-0001 AC-30] weeks 3 · 0 · 52, count 0 · 100, per MONTH, 종료일이 어제 → 400`
+- [x] RED: `[BE-0001 AC-31] 살아 있는 횟수권이 있으면 월 정액 → OTHER_KIND_ACTIVE + availableFrom`, `월 정액의 아직 안 만든 주기와 겹치는 횟수권 → OTHER_KIND_ACTIVE`, `다른 종류가 만료됐고 기간만 겹치면 PERIOD_OVERLAP`, `만료됐고 안 겹치면 201`
+- [x] RED: `[BE-0001 AC-31] 같은 회원에게 횟수권 · 월 정액을 동시에 → 하나만 201`, `entitlement_kind_no_overlap 위반은 422 PERIOD_OVERLAP`(처리기를 직접 부르는 테스트)
+- [x] GREEN: 등록 트랜잭션에 월 정액 INSERT → 그 한 건의 주기 생성(수강권 쓰기 경로 1.2 · 2의 SQL). 다른 종류 검사는 쓰기 경로 1.1 · 1.2의 `active_until` · `overlaps` 한 쿼리로 하고, 월 정액은 `starts_on ~ ends_on` 전체와 비교한다
+- [x] REFACTOR: 두 종류의 검사를 한 메서드로
+- 정한 것: 등록 입력은 sealed interface `model/Registration`(`PassRegistration` · `SubscriptionRegistration`), 카드는 `model/Card`(`PassCard` · `SubscriptionCard`), 응답은 `dto/EntitlementCardResponse`로 종류를 묶는다. 4.6 카드 계산이 같은 `Card`를 쓴다
+- 정한 것: 월 정액의 400 필드 이름은 `limit` · `limit.per` · `limit.count` · `startsOn` · `weeks`다. 종료일이 오늘 이전이면 종료일을 받지 않으므로 `startsOn`이다
+- 정한 것: 다른 종류 검사는 `SubscriptionRepository.against`(횟수권 등록) · `EntitlementRepository.passesAgainst`(월 정액 등록)가 `OtherKind(activeUntil, overlaps)`를 주고, 거절은 `EntitlementService.rejectOtherKind` 한 곳이다
+- 테스트: `SubscriptionRegisterApiTests` 26개, `EntitlementKindRuleApiTests` 21개, `EntitlementConstraintErrorsTests` 2개. `PassRegisterApiTests`는 월 정액 400 케이스를 지워 26개. 전체 406개 통과. 구현 전 커밋에 새 테스트(그때 33개)를 얹어 32개가 실패하는 것은 구현을 쓴 뒤에 확인했다. 남은 1개는 횟수권 등록만 쓰는 성공 케이스다
+- 변이 56건 중 55건을 테스트가 잡았다. 처음 49건 중 9건이 살아남아 테스트를 보강했다(`weeks` 5 · 6, 종료일이 오늘인 월 정액, 겹침 경계, 다른 회원 · 다른 강사 설정, `limit` 모양). 남은 1건은 `ON CONFLICT … DO NOTHING` 제거로, 4.5의 "두 번 돌려도 같음" 테스트가 잡아야 한다
+- 종류 겹침 테스트의 데이터는 DB 제약(`entitlement_kind_no_overlap`)이 대신 막지 못하는 것을 쓴다. 이미 끝났거나 오픈 범위 밖이라 주기 행이 없는 월 정액이다. 동시 등록 테스트도 같다
 
 ### 4.5 주기 생성 작업 · 오픈 범위 이벤트
 
