@@ -572,10 +572,17 @@ flowchart LR
 
 ### 4.6 카드 계산 (EntitlementFacade · CardReader)
 
-- [ ] RED: `[BE-0001 AC-33] 횟수권 ACTIVE · NOT_STARTED · EXPIRED · 잔여 0, 월 정액 ACTIVE + currentPeriod, 주기 행이 없으면 currentPeriod null`
-- [ ] RED: `[BE-0001 AC-33] 섞인 카드 순서`, `다른 강사 회원의 카드는 없다`
-- [ ] GREEN: `EntitlementFacade.cards(instructorId, memberIds)` → 회원별 정렬된 `EntitlementCardInfo` 목록. 회원 id 목록을 한 번에 받아 쿼리 수를 고정한다. 상태 · 순서는 오늘 기준으로 계산한다
-- [ ] REFACTOR: 등록 · 잔여 수정 응답이 같은 카드 계산을 쓰게
+- [x] RED: `[BE-0001 AC-33] 횟수권 ACTIVE · NOT_STARTED · EXPIRED · 잔여 0, 월 정액 ACTIVE + currentPeriod, 주기 행이 없으면 currentPeriod null`
+- [x] RED: `[BE-0001 AC-33] 섞인 카드 순서`, `다른 강사 회원의 카드는 없다`
+- [x] GREEN: `EntitlementFacade.cards(instructorId, memberIds)` → 회원별 정렬된 `EntitlementCardInfo` 목록. 회원 id 목록을 한 번에 받아 쿼리 수를 고정한다. 상태 · 순서는 오늘 기준으로 계산한다
+- [x] REFACTOR: 등록 응답이 같은 카드 계산을 쓰게(잔여 수정 응답은 4.8에서 같은 `CardReader.card`를 쓴다)
+- 정한 것: `EntitlementFacade.cards`는 `Map<Long, List<EntitlementCardInfo>>`를 준다. 카드가 없는 회원과 다른 강사의 회원은 키가 없다. `EntitlementCardInfo`는 sealed interface이고 안에 `Pass` · `Subscription` · `Period` record를 둔다. 상태 · 주기 단위는 enum 대신 이름(문자열)이다
+- 정한 것: 카드는 `repository/CardRepository`의 SQL 한 번(횟수권 행 `UNION ALL` 월 정액 등록 + 오늘을 덮는 주기 `LEFT JOIN`)으로 읽고, 상태는 `CardState`, 순서는 `model/CardOrder`가 정한다. SQL 맨 앞에 4.7의 쿼리 수 테스트가 셀 `/* member cards */`를 달았다
+- 정한 것: prd에 없던 "ACTIVE 잔여 0" 묶음 안의 순서는 1묶음과 같은 끝 날짜 이른 순이다. 지금 주기가 없는 월 정액은 등록 종료일을 쓴다(prd의 질문 목록에서 카드 순서 2 ~ 4단계는 BE 기본값으로 해소됐다). 4.9에서 prd · 수강권 `POLICY.md`에 적는다
+- 정한 것: 등록 응답은 방금 저장한 행을 같은 트랜잭션에서 `CardReader.card`로 다시 읽어 만든다. 그래서 `SubscriptionRepository.currentPeriod`는 지웠다
+- 4.7에서 정할 것: "만료된 것만 있으면 `frontCard`는 null"을 bff가 `state` 문자열로 판정할지, Facade가 맨 앞 카드를 따로 줄지
+- 테스트: `EntitlementFacadeTests` 16개, `CardOrderTests` 5개(같은 날짜면 횟수권 먼저는 등록 규칙 때문에 정상 데이터로 만들기 어려워 카드끼리 비교한다), 등록 응답 테스트 2개(`PassRegisterApiTests` · `SubscriptionRegisterApiTests`에 하나씩, 카드 순서상 앞 카드가 있어도 응답은 방금 만든 카드). 전체 444개 통과. 빈 Facade · 비교기에 그때 테스트 20개를 얹어 19개가 실패했다. 통과한 1개는 "회원 id가 없으면 빈 결과"다
+- 변이 24건 중 23건을 테스트가 잡았다. 처음 20건 중 2건과 리뷰가 찾은 4건(요청한 회원 조건 두 곳, 등록 응답의 id 필터, 지금 주기가 없는 월 정액의 기준 날짜)은 테스트를 고치거나 더해 잡았다. 남은 1건은 `CardReader.card`의 종류 검사 제거로, 같은 번호의 다른 종류 카드는 등록 규칙상 늘 만료라 순서상 뒤에 있어 결과가 같다
 
 ### 4.7 bff에 카드 붙이기
 
