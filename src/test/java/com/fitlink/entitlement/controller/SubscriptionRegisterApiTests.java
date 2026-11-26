@@ -84,6 +84,20 @@ class SubscriptionRegisterApiTests extends IntegrationTest {
 			.andExpect(jsonPath("$.currentPeriod.entitlementId").value(current));
 	}
 
+	// 응답은 회원의 카드를 다시 읽어 만든다. 지금 주기가 더 일찍 끝나는 기존 월 정액이 카드 순서상 앞이어도 방금 만든 카드를 준다
+	@Test
+	void 앞_순서의_월_정액이_있어도_응답은_방금_만든_카드다() throws Exception {
+		register(memberId, subscription("WEEK", 2, "2026-11-05", 8)).andExpect(status().isCreated());
+
+		ResultActions result = register(memberId, subscription("FOUR_WEEKS", 8, "2026-11-12", 4))
+			.andExpect(status().isCreated());
+
+		long id = jdbc.sql("SELECT max(id) FROM subscription").query(Long.class).single();
+		result.andExpect(jsonPath("$.id").value(id))
+			.andExpect(jsonPath("$.limit.per").value("FOUR_WEEKS"))
+			.andExpect(jsonPath("$.currentPeriod.endsOn").value("2026-12-09"));
+	}
+
 	@Test
 	void 사주마다_방식_8주는_2주기이고_주기는_28일이다() throws Exception {
 		register(memberId, subscription("FOUR_WEEKS", 6, "2026-11-05", 8)).andExpect(status().isCreated())

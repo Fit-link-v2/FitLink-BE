@@ -1,11 +1,9 @@
 package com.fitlink.entitlement.repository;
 
-import com.fitlink.entitlement.model.CurrentPeriod;
 import com.fitlink.entitlement.model.OtherKind;
 import com.fitlink.entitlement.model.SubscriptionRegistration;
 import java.time.LocalDate;
 import java.util.List;
-import java.util.Optional;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
@@ -81,20 +79,6 @@ public class SubscriptionRepository {
 				   AND p.start + u.len - 1 >= CAST(:today AS date)
 				ON CONFLICT (source_id, window_start) WHERE source_id IS NOT NULL DO NOTHING
 				""").param("subscriptionId", subscriptionId).param("today", today).update();
-	}
-
-	// 오늘을 덮는 주기. 주기는 겹치지 않으므로 많아야 하나다
-	public Optional<CurrentPeriod> currentPeriod(long subscriptionId, LocalDate today) {
-		return jdbc.sql("""
-				SELECT id, window_start, window_end, max_count, max_count - used_count AS remaining
-				  FROM entitlement
-				 WHERE source_id = :subscriptionId AND window_start <= :today AND :today <= window_end
-				""")
-			.param("subscriptionId", subscriptionId)
-			.param("today", today)
-			.query((rs, row) -> new CurrentPeriod(rs.getLong("id"), rs.getObject("window_start", LocalDate.class),
-					rs.getObject("window_end", LocalDate.class), rs.getInt("max_count"), rs.getInt("remaining")))
-			.optional();
 	}
 
 }

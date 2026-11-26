@@ -66,6 +66,19 @@ class PassRegisterApiTests extends IntegrationTest {
 		result.andExpect(jsonPath("$.id").value(id));
 	}
 
+	// 응답은 회원의 카드를 다시 읽어 만든다. 종료일이 더 이른 기존 횟수권이 카드 순서상 앞이어도 방금 만든 카드를 준다
+	@Test
+	void 앞_순서의_횟수권이_있어도_응답은_방금_만든_카드다() throws Exception {
+		register(memberId, pass("2026-11-01", "2026-11-20", 5)).andExpect(status().isCreated());
+
+		ResultActions result = register(memberId, pass("2026-11-01", "2026-12-31", 10)).andExpect(status().isCreated());
+
+		long id = jdbc.sql("SELECT max(id) FROM entitlement").query(Long.class).single();
+		result.andExpect(jsonPath("$.id").value(id))
+			.andExpect(jsonPath("$.endsOn").value("2026-12-31"))
+			.andExpect(jsonPath("$.maxCount").value(10));
+	}
+
 	@Test
 	void 오늘_끝나는_횟수권도_등록된다() throws Exception {
 		register(memberId, pass("2026-11-01", "2026-11-12", 3)).andExpect(status().isCreated())
