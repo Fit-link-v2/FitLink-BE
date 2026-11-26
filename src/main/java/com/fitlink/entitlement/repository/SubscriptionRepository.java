@@ -4,6 +4,7 @@ import com.fitlink.entitlement.model.CurrentPeriod;
 import com.fitlink.entitlement.model.OtherKind;
 import com.fitlink.entitlement.model.SubscriptionRegistration;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
@@ -47,6 +48,19 @@ public class SubscriptionRepository {
 			.param("memberId", memberId)
 			.query((rs, row) -> new OtherKind(rs.getObject("active_until", LocalDate.class), rs.getBoolean("overlaps")))
 			.single();
+	}
+
+	// 주기를 더 만들 수 있는 월 정액, 즉 아직 끝나지 않은 것의 id. instructorId가 null이면 모든 강사다.
+	// 수강 종료(ENDED) 회원의 것도 넣는다. 수강 종료를 되돌렸을 때 주기가 비어 있지 않게 하려는 것이다
+	public List<Long> unfinished(Long instructorId, LocalDate today) {
+		return jdbc.sql("""
+				SELECT s.id
+				  FROM subscription s
+				  JOIN member m ON m.id = s.member_id
+				 WHERE s.ends_on >= :today
+				   AND (CAST(:instructorId AS bigint) IS NULL OR m.instructor_id = :instructorId)
+				 ORDER BY s.id
+				""").param("today", today).param("instructorId", instructorId).query(Long.class).list();
 	}
 
 	// 월 정액 하나의 주기 중 오늘부터 그 강사의 오픈 범위 [오늘, 오늘 + N일) 끝까지에 걸치는 것을 만든다.
