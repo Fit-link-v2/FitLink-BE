@@ -3,10 +3,15 @@ package com.fitlink.entitlement.service;
 import com.fitlink.common.exception.FitlinkException;
 import com.fitlink.common.exception.InvalidRequestException;
 import com.fitlink.entitlement.exception.EntitlementErrorCode;
+import com.fitlink.entitlement.model.Card;
 import com.fitlink.entitlement.model.CardState;
 import com.fitlink.entitlement.model.PassCard;
 import com.fitlink.entitlement.model.PassRegistration;
+import com.fitlink.entitlement.model.Registration;
+import com.fitlink.entitlement.model.SubscriptionCard;
+import com.fitlink.entitlement.model.SubscriptionRegistration;
 import com.fitlink.entitlement.repository.EntitlementRepository;
+import com.fitlink.entitlement.repository.SubscriptionRepository;
 import com.fitlink.membership.MembershipFacade;
 import java.time.Clock;
 import java.time.LocalDate;
@@ -18,12 +23,19 @@ public class EntitlementService {
 
 	private final EntitlementRepository entitlements;
 
+	private final SubscriptionRepository subscriptions;
+
+	private final PeriodGeneration periods;
+
 	private final MembershipFacade memberships;
 
 	private final Clock clock;
 
-	EntitlementService(EntitlementRepository entitlements, MembershipFacade memberships, Clock clock) {
+	EntitlementService(EntitlementRepository entitlements, SubscriptionRepository subscriptions,
+			PeriodGeneration periods, MembershipFacade memberships, Clock clock) {
 		this.entitlements = entitlements;
+		this.subscriptions = subscriptions;
+		this.periods = periods;
 		this.memberships = memberships;
 		this.clock = clock;
 	}
@@ -31,17 +43,36 @@ public class EntitlementService {
 	// 판정 순서는 입력(400) → 회원(404) → 수강 종료(422)다. 회원 행을 잠그고 시작해 같은 회원의 등록이 동시에 와도 차례로 돈다.
 	// 지난 시작일은 받는다. 이미 진행 중인 수강권을 옮겨 적는 경우다
 	@Transactional
-	public PassCard register(long instructorId, long memberId, PassRegistration pass) {
+	public Card register(long instructorId, long memberId, Registration registration) {
 		LocalDate today = LocalDate.now(clock);
-		if (pass.endsOn().isBefore(today)) {
-			throw new InvalidRequestException("endsOn", "종료일은 오늘 이후다");
+		if (registration.endsOn().isBefore(today)) {
+			// 월 정액은 종료일을 받지 않으므로 시작일 문제로 알려 준다
+			String field = (registration instanceof PassRegistration) ? "endsOn" : "startsOn";
+			throw new InvalidRequestException(field, "종료일은 오늘 이후다");
 		}
 		if (!memberships.lockActive(instructorId, memberId)) {
 			throw new FitlinkException(EntitlementErrorCode.MEMBER_ENDED);
 		}
+		return switch (registration) {
+			case PassRegistration pass -> registerPass(memberId, pass, today);
+			case SubscriptionRegistration subscription -> registerSubscription(memberId, subscription, today);
+		};
+	}
+
+	private PassCard registerPass(long memberId, PassRegistration pass, LocalDate today) {
 		long id = entitlements.insertPass(memberId, pass);
 		return new PassCard(id, pass.startsOn(), pass.endsOn(), pass.maxCount(), pass.maxCount(),
 				CardState.of(pass.startsOn(), pass.endsOn(), today));
+	}
+
+	// 오픈 범위 안의 주기를 같은 트랜잭션에서 바로 만든다. 회원이 그 범위의 수업을 예약하려면 주기 행이 있어야 한다
+	private SubscriptionCard registerSubscription(long memberId, SubscriptionRegistration subscription,
+			LocalDate today) {
+		long id = subscriptions.insert(memberId, subscription);
+		periods.generate(id, today);
+		return new SubscriptionCard(id, subscription.per(), subscription.count(), subscription.startsOn(),
+				subscription.endsOn(), CardState.of(subscription.startsOn(), subscription.endsOn(), today),
+				subscriptions.currentPeriod(id, today).orElse(null));
 	}
 
 }

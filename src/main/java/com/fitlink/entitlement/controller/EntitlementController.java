@@ -1,7 +1,7 @@
 package com.fitlink.entitlement.controller;
 
 import com.fitlink.entitlement.dto.EntitlementRegisterRequest;
-import com.fitlink.entitlement.dto.PassCardResponse;
+import com.fitlink.entitlement.dto.EntitlementCardResponse;
 import com.fitlink.entitlement.service.EntitlementService;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -23,9 +23,9 @@ class EntitlementController {
 
 	@PostMapping("/instructor/members/{id}/entitlements")
 	@ResponseStatus(HttpStatus.CREATED)
-	PassCardResponse register(@AuthenticationPrincipal Long instructorId, @PathVariable long id,
+	EntitlementCardResponse register(@AuthenticationPrincipal Long instructorId, @PathVariable long id,
 			@RequestBody JsonNode body) {
-		return PassCardResponse.of(entitlements.register(instructorId, id, EntitlementRegisterRequest.from(body)));
+		return EntitlementCardResponse.of(entitlements.register(instructorId, id, EntitlementRegisterRequest.from(body)));
 	}
 
 }
