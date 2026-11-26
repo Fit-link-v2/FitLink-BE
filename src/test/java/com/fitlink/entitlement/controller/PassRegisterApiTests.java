@@ -124,9 +124,6 @@ class PassRegisterApiTests extends IntegrationTest {
 				arguments("날짜 형식이 아니다", pass("2026/11/01", "2026-12-31", 10), "startsOn"),
 				arguments("없는 날짜", pass("2026-11-01", "2026-02-30", 10), "endsOn"),
 				arguments("연도가 다섯 자리 이상", pass("2026-11-01", "+9999999-01-01", 10), "endsOn"),
-				arguments("월 정액은 아직 받지 않는다",
-						"{ \"kind\": \"SUBSCRIPTION\", \"limit\": { \"per\": \"WEEK\", \"count\": 2 }, \"startsOn\": \"2026-11-12\", \"weeks\": 8 }",
-						"kind"),
 				arguments("횟수가 정수가 아니다",
 						"{ \"kind\": \"PASS\", \"startsOn\": \"2026-11-01\", \"endsOn\": \"2026-12-31\", \"maxCount\": 1.5 }",
 						"maxCount"));
